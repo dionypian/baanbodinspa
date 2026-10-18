@@ -1,36 +1,52 @@
 <?php
 session_start();
 
-$conn = new mysqli("localhost", "root", "", "massage_booking");
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
-$conn->set_charset("utf8mb4");
+require_once 'db-connect.php'; 
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $staff_id   = intval($_POST['staff_id']);
-    $name       = trim($_POST['name']);
-    $nickname   = trim($_POST['nickname']);
-    $phone      = trim($_POST['phone']);
-    $gender     = isset($_POST['gender']) ? trim($_POST['gender']) : NULL;
-    $birthdate  = !empty($_POST['birthdate']) ? $_POST['birthdate'] : NULL;
-    $day_off    = isset($_POST['day_off']) ? trim($_POST['day_off']) : NULL;
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $staff_id  = isset($_POST['staff_id']) ? intval($_POST['staff_id']) : 0;
+    $name      = trim($_POST['name'] ?? '');
+    $nickname  = trim($_POST['nickname'] ?? '');
+    $phone     = trim($_POST['phone'] ?? '');
+    $gender    = !empty($_POST['gender']) ? trim($_POST['gender']) : NULL;
+    $birthdate = !empty($_POST['birthdate']) ? trim($_POST['birthdate']) : NULL;
+    $day_off   = !empty($_POST['day_off']) ? trim($_POST['day_off']) : NULL;
 
     if ($staff_id > 0 && !empty($name) && !empty($phone)) {
-        // คำสั่ง UPDATE ข้อมูล
-        $stmt = $conn->prepare("UPDATE staffs SET name=?, nickname=?, phone=?, gender=?, birthdate=?, day_off=? WHERE staff_id=?");
-        $stmt->bind_param("ssssssi", $name, $nickname, $phone, $gender, $birthdate, $day_off, $staff_id);
+        try {
+            // ใช้ PDO เพื่อจัดการ NULL และชนิดข้อมูลได้อย่างแม่นยำ 100%
+            $sql = "UPDATE staffs 
+                    SET name = :name, 
+                        nickname = :nickname, 
+                        phone = :phone, 
+                        gender = :gender, 
+                        birthdate = :birthdate, 
+                        day_off = :day_off 
+                    WHERE staff_id = :staff_id";
 
-        if ($stmt->execute()) {
-            $_SESSION['success'] = "อัปเดตข้อมูลพนักงานเรียบร้อยแล้ว";
-        } else {
-            $_SESSION['error'] = "เกิดข้อผิดพลาด: " . $stmt->error;
+            $stmt = $pdo->prepare($sql);
+            $success = $stmt->execute([
+                ':name'      => $name,
+                ':nickname'  => $nickname,
+                ':phone'     => $phone,
+                ':gender'    => $gender,
+                ':birthdate' => $birthdate,
+                ':day_off'   => $day_off,
+                ':staff_id'  => $staff_id
+            ]);
+
+            if ($success) {
+                $_SESSION['success'] = "อัปเดตข้อมูลพนักงานเรียบร้อยแล้ว";
+            } else {
+                $_SESSION['error'] = "ไม่สามารถอัปเดตข้อมูลได้";
+            }
+        } catch (PDOException $e) {
+            $_SESSION['error'] = "เกิดข้อผิดพลาดฐานข้อมูล: " . $e->getMessage();
         }
-        $stmt->close();
+    } else {
+        $_SESSION['error'] = "กรุณากรอกข้อมูลที่จำเป็น (ชื่อ และ เบอร์โทรศัพท์) ให้ครบถ้วน";
     }
-    $conn->close();
 
-    // บันทึกเสร็จให้ส่งกลับหน้าหลักที่แท็บพนักงาน
     header("Location: dashboard.php?tab=staff");
     exit();
 }
