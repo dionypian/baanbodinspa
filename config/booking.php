@@ -521,7 +521,7 @@ if (!empty($booked_service_ids) && $user_id > 0) {
                                     <?php foreach ($my_coupons as $cp): ?>
                                         <label class="flex items-center space-x-2 text-xs text-[#382214] cursor-pointer bg-white p-2 rounded-lg border border-gray-200 hover:bg-amber-100/50">
                                             <input type="checkbox" name="use_coupon_ids[]" value="<?= $cp['id'] ?>" form="saveBookingForm" class="w-4 h-4 text-[#382214] rounded focus:ring-[#382214]">
-                                            <span>คูปอง [<b><?= htmlspecialchars($cp['coupon_code']) ?></b>] - <?= htmlspecialchars($cp['service_name'] ?? 'คูปองบริการ') ?></span>
+                                            <span>คูปอง [<b><?= htmlspecialchars($cp['coupon_code']) ?></b>] - <?= htmlspecialchars($cp['service_name'] ?? 'คูปองบริการ' ) ?> <?= htmlspecialchars($cp['duration']) ?> นาที</span>
                                         </label>
                                     <?php endforeach; ?>
                                 </div>

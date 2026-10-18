@@ -66,31 +66,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 mkdir($upload_dir, 0777, true);
             }
             $slip_filename = 'slip_coupon_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
-            move_uploaded_file($file_tmp, $upload_dir .$slip_filename);
+            move_uploaded_file($file_tmp, $upload_dir . $slip_filename);
         }
     }
 
-    // 1. ดึงข้อมูลประเภทคูปอง
-    $sql_c = "SELECT c.*, s.id AS service_id 
-              FROM coupon c 
-              LEFT JOIN allservices s ON s.coupon_id = c.coupon_id 
-              WHERE c.coupon_id = :coupon_id";
+    // 1. ดึงข้อมูลเล่มคูปองที่เลือก
+    $sql_c = "SELECT * FROM coupon WHERE coupon_id = :coupon_id";
     $stmt_c = $pdo->prepare($sql_c);
-    $stmt_c->execute([':coupon_id' =>$coupon_id]);
-    $target_coupon =$stmt_c->fetch(PDO::FETCH_ASSOC);
+    $stmt_c->execute([':coupon_id' => $coupon_id]);
+    $target_coupon = $stmt_c->fetch(PDO::FETCH_ASSOC);
 
     if ($target_coupon) {
         try {
             $pdo->beginTransaction();
 
-            $total_price =$target_coupon['price'];
+            $total_price = $target_coupon['price'];
             $total_leaves = intval($target_coupon['total_leaves']);
-            $service_id =$target_coupon['service_id'] ?? null;
 
-            // 2. บันทึกลงตาราง coupon_book
+            // 🟢 2. ดึง service_id ทั้งหมด (id: 1, 2, 3, 4, 5, 6) ที่ผูกกับ coupon_id นี้
+            $sql_s = "SELECT id FROM allservices WHERE coupon_id = :coupon_id ORDER BY id ASC";
+            $stmt_s = $pdo->prepare($sql_s);
+            $stmt_s->execute([':coupon_id' => $coupon_id]);
+            $service_ids = $stmt_s->fetchAll(PDO::FETCH_COLUMN); // ได้ Array: [1, 2, 3, 4, 5, 6]
+
+            // 3. บันทึกลงตาราง coupon_book
             $sql_book = "INSERT INTO coupon_book (cus_id, coupon_id, total_price, payment_method, slip_image, sold_date) 
                          VALUES (:cus_id, :coupon_id, :total_price, :payment_method, :slip_image, NOW())";
-            $stmt_book =$pdo->prepare($sql_book);$stmt_book->execute([
+            $stmt_book = $pdo->prepare($sql_book);
+            $stmt_book->execute([
                 ':cus_id' => $cus_id,
                 ':coupon_id' => $coupon_id,
                 ':total_price' => $total_price,
@@ -98,37 +101,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 ':slip_image' => $slip_filename
             ]);
 
-            $coupon_book_id =$pdo->lastInsertId();
+            $coupon_book_id = $pdo->lastInsertId();
 
-            // 3. สร้างใบคูปองลงตาราง cus_coupon
+            // 🟢 4. สร้างใบคูปอง 6 ใบ โดยกำหนด service_id ให้แยกเป็น 1, 2, 3, 4, 5, 6 ตามลำดับ
             $sql_cus_coupon = "INSERT INTO cus_coupon (coupon_book_id, cus_id, coupon_id, service_id, coupon_code, used) 
                                VALUES (:coupon_book_id, :cus_id, :coupon_id, :service_id, :coupon_code, 0)";
             $stmt_cc = $pdo->prepare($sql_cus_coupon);
 
-            for ($i = 0; $i <$total_leaves; $i++) {$coupon_code = generateNextCouponCode($pdo);$stmt_cc->execute([
+            for ($i = 0; $i < $total_leaves; $i++) {
+                $coupon_code = generateNextCouponCode($pdo);
+                
+                // ดึง service_id ตามลำดับ index $i (ใบที่ 1 ได้ id: 1, ใบที่ 2 ได้ id: 2, ...)
+                $assigned_service_id = $service_ids[$i] ?? null;
+
+                $stmt_cc->execute([
                     ':coupon_book_id' => $coupon_book_id,
                     ':cus_id' => $cus_id,
                     ':coupon_id' => $coupon_id,
-                    ':service_id' => $service_id,
+                    ':service_id' => $assigned_service_id,
                     ':coupon_code' => $coupon_code
                 ]);
             }
 
             $pdo->commit();
 
-            // ฝากข้อความแจ้งเตือนไว้ใน Session
-            $_SESSION['flash_message'] = "สั่งซื้อเล่มคูปองสำเร็จ! คุณได้รับคูปองเพิ่ม {$total_leaves} ใบ";
+            $_SESSION['flash_message'] = "สั่งซื้อเล่มคูปองสำเร็จ! คุณได้รับคูปองนวดครบทั้ง 6 รายการ";
             $_SESSION['flash_type'] = "success";
 
         } catch (Exception $e) {
-            $pdo->rollBack();$_SESSION['flash_message'] = 'เกิดข้อผิดพลาดในการทำรายการ กรุณาลองใหม่อีกครั้ง: ' . $e->getMessage();$_SESSION['flash_type'] = 'error';
+            $pdo->rollBack();
+            $_SESSION['flash_message'] = 'เกิดข้อผิดพลาดในการทำรายการ: ' . $e->getMessage();
+            $_SESSION['flash_type'] = 'error';
         }
     } else {
         $_SESSION['flash_message'] = 'ไม่พบข้อมูลเล่มคูปองที่เลือก';
         $_SESSION['flash_type'] = 'error';
     }
 
-    // 🔴 แก้ไขจุดนี้: Redirect เพื่อป้องกันการยื่นข้อมูลซ้ำเมื่อ Refresh หน้าจอ
     header("Location: " . $_SERVER['PHP_SELF']);
     exit;
 }
@@ -159,9 +168,9 @@ $coupons =$stmt_u->fetchAll(PDO::FETCH_ASSOC);
 // 2. ดึงรายการเล่มคูปองที่มีขายจากตาราง coupon (สำหรับ Pop-up)
 // ----------------------------------------------------
 $sql_available_coupons = "
-    SELECT c.*, s.name AS service_name, s.duration 
+    SELECT c.* 
     FROM coupon c 
-    LEFT JOIN allservices s ON s.coupon_id = c.coupon_id 
+    GROUP BY c.coupon_id 
     ORDER BY c.price ASC
 ";
 $stmt_a =$pdo->prepare($sql_available_coupons);$stmt_a->execute();
