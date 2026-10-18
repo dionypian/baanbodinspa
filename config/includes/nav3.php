@@ -3,25 +3,6 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// ระบบจัดการสลับภาษา
-if (isset($_GET['lang'])) {
-    $allowed_langs = ['th', 'en'];
-    if (in_array($_GET['lang'], $allowed_langs)) {
-        $_SESSION['lang'] = $_GET['lang'];
-    }
-
-    $clean_url = strtok($_SERVER['REQUEST_URI'], '?');
-    header("Location: " . $clean_url);
-    exit();
-}
-
-$current_lang = isset($_SESSION['lang']) ? $_SESSION['lang'] : 'th';
-
-$flags = [
-    'th' => 'https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/3.5.0/flags/4x3/th.svg',
-    'en' => 'https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/3.5.0/flags/4x3/gb.svg' 
-];
-
 // ดึงชื่อไฟล์ปัจจุบัน
 $current_page = basename($_SERVER['PHP_SELF']);
 ?>
@@ -52,7 +33,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 ประวัติการจอง
             </a>
 
-            <!-- 3. ปุ่มโปรไฟล์ -->
+            <!-- 3. ปุ่มประวัติการจอง -->
+            <a href="mycoupon.php"
+                class="relative text-[#4A3B32] font-medium py-1 after:content-[''] after:absolute after:h-[2px] after:bottom-0 after:left-1/2 after:transform after:-translate-x-1/2 after:bg-[#4A3B32] after:transition-all after:duration-300 hover:after:w-full 
+                <?php echo ($current_page == 'mycoupon.php') ? 'after:w-full font-bold' : 'after:w-0'; ?>">
+                คูปองของฉัน
+            </a>
+
+            <!-- 4. ปุ่มโปรไฟล์ -->
             <a href="profile.php"
                 class="relative text-[#4A3B32] font-medium py-1 after:content-[''] after:absolute after:h-[2px] after:bottom-0 after:left-1/2 after:transform after:-translate-x-1/2 after:bg-[#4A3B32] after:transition-all after:duration-300 hover:after:w-full 
                 <?php echo ($current_page == 'profile.php') ? 'after:w-full font-bold' : 'after:w-0'; ?>">

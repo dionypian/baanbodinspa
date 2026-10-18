@@ -122,7 +122,6 @@ $conn_srv->close();
                                 <td class="p-4"><?= htmlspecialchars($row['day_off'] ?: '-') ?></td>
                                 <td class="p-4"><?= htmlspecialchars($row['phone']) ?></td>
                                 <td class="p-4 text-center space-x-1">
-                                    <!-- เปลี่ยน text-ml เป็น text-xs เพื่อความสวยงามและถูกต้องตาม Tailwind -->
                                     <button
                                         type="button"
                                         @click="
@@ -136,10 +135,19 @@ $conn_srv->close();
                                         บริการ
                                     </button>
 
+                                    <!-- 🟢 แก้ไขการส่งค่าอาร์กิวเมนต์แบบแยกตัวแปร ชัดเจน 100% ไม่พึ่ง JSON String -->
                                     <button
                                         type="button"
-                                        onclick='openEditModal(<?= json_encode($row, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)'
-                                        class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-ml font-medium transition-colors"
+                                        onclick="openEditModal(
+                                            <?= (int)$row['staff_id'] ?>, 
+                                            '<?= htmlspecialchars($row['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>', 
+                                            '<?= htmlspecialchars($row['nickname'] ?? '', ENT_QUOTES, 'UTF-8') ?>', 
+                                            '<?= htmlspecialchars($row['phone'] ?? '', ENT_QUOTES, 'UTF-8') ?>', 
+                                            '<?= htmlspecialchars($row['gender'] ?? 'male', ENT_QUOTES, 'UTF-8') ?>', 
+                                            '<?= htmlspecialchars($row['birthdate'] ?? '', ENT_QUOTES, 'UTF-8') ?>', 
+                                            '<?= htmlspecialchars($row['day_off'] ?? 'Monday', ENT_QUOTES, 'UTF-8') ?>'
+                                        )"
+                                        class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-medium transition-colors"
                                     >
                                         แก้ไข
                                     </button>
@@ -334,7 +342,7 @@ $conn_srv->close();
                 
             <form action="editstaff.php" method="POST" class="space-y-4">
                 <!-- Hidden Input สำหรับเก็บ staff_id -->
-                <input type="hidden" id="edit_staff_id" name="staff_id">
+                <input type="hidden" id="edit_staff_id" name="staff_id" value="">
 
                 <div>
                     <label class="block text-sm font-semibold text-[#382214] mb-1">ชื่อ-นามสกุล <span class="text-red-500">*</span></label>
@@ -452,52 +460,47 @@ $conn_srv->close();
         </div>
     </div>
 </section>
+
 <script>
-    function openEditModal(staff) {
-        if (!staff) return;
-
-        // 1. ดึง staff_id ให้ชัวร์ 100%
-        const staffId = staff.staff_id || staff.id || 0;
-        
-        const idInput     = document.getElementById('edit_staff_id');
-        const nameInput   = document.getElementById('edit_staff_name');
-        const nickInput   = document.getElementById('edit_nickname');
-        const phoneInput  = document.getElementById('edit_phone');
-        const genInput    = document.getElementById('edit_gender');
-        const dayOffInput = document.getElementById('edit_day_off');
-        const birthInput  = document.getElementById('edit_birthdate_picker');
-
-        if (idInput)     idInput.value     = staffId;
-        if (nameInput)   nameInput.value   = staff.name || '';
-        if (nickInput)   nickInput.value   = staff.nickname || '';
-        if (phoneInput)  phoneInput.value  = staff.phone || '';
-        if (genInput)    genInput.value    = staff.gender || 'male';
-        if (dayOffInput) dayOffInput.value = staff.day_off || 'Monday';
-
-        // 2. ตรวจสอบการใช้งาน DatePicker แบบปลอดภัย ไม่ให้ Script พัง (Safe Check)
-        if (birthInput) {
-            birthInput.value = staff.birthdate || '';
+    // 🟢 ปรับเปลี่ยนลายเซ็นฟังก์ชันให้รับอาร์กิวเมนต์แยกกันโดยตรง 100%
+    function openEditModal(staffId, name, nickname, phone, gender, birthdate, dayOff) {
+        // 1. กำหนดค่า ID ชัดเจนทันที
+        const idInput = document.getElementById('edit_staff_id');
+        if (idInput) {
+            idInput.value = staffId;
         }
-        
-        try {
+
+        // 2. กำหนดค่าฟิลด์ต่างๆ
+        if (document.getElementById('edit_staff_name')) {
+            document.getElementById('edit_staff_name').value = name || nickname || '';
+        }
+        if (document.getElementById('edit_nickname')) {
+            document.getElementById('edit_nickname').value = nickname || '';
+        }
+        if (document.getElementById('edit_phone')) {
+            document.getElementById('edit_phone').value = phone || '';
+        }
+        if (document.getElementById('edit_gender')) {
+            document.getElementById('edit_gender').value = gender || 'male';
+        }
+        if (document.getElementById('edit_day_off')) {
+            document.getElementById('edit_day_off').value = dayOff || 'Monday';
+        }
+
+        // 3. ตั้งค่า DatePicker
+        const birthInput = document.getElementById('edit_birthdate_picker');
+        if (birthInput) {
+            birthInput.value = birthdate || '';
             if (typeof editDatePicker !== 'undefined' && editDatePicker) {
-                if (staff.birthdate) {
-                    editDatePicker.setDate(staff.birthdate);
+                if (birthdate) {
+                    editDatePicker.setDate(birthdate);
                 } else {
                     editDatePicker.clear();
                 }
-            } else if (typeof window.editDatePicker !== 'undefined' && window.editDatePicker) {
-                if (staff.birthdate) {
-                    window.editDatePicker.setDate(staff.birthdate);
-                } else {
-                    window.editDatePicker.clear();
-                }
             }
-        } catch (err) {
-            console.warn('DatePicker notice:', err);
         }
 
-        // 3. เปิด Modal
+        // 4. เปิด Modal
         openModal('editStaffModal');
     }
 

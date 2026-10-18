@@ -331,6 +331,22 @@ if ($active_tab === 'summary') {
                     <span class="text-xl font-medium text-[#382214]">สวัสดี <?php echo $_SESSION['username']; ?></span>
                 </div>
             </header>
+
+            <?php if (isset($_SESSION['success'])): ?>
+                <div class="mb-4 p-4 bg-green-100 border border-green-300 text-green-800 rounded-xl font-medium flex items-center justify-between">
+                    <span>✅ <?= $_SESSION['success']; ?></span>
+                    <button onclick="this.parentElement.remove()" class="text-green-800 font-bold">&times;</button>
+                </div>
+                <?php unset($_SESSION['success']); ?>
+            <?php endif; ?>
+
+            <?php if (isset($_SESSION['error'])): ?>
+                <div class="mb-4 p-4 bg-red-100 border border-red-300 text-red-800 rounded-xl font-medium flex items-center justify-between">
+                    <span>⚠️ <?= $_SESSION['error']; ?></span>
+                    <button onclick="this.parentElement.remove()" class="text-red-800 font-bold">&times;</button>
+                </div>
+                <?php unset($_SESSION['error']); ?>
+            <?php endif; ?>
             
             <?php include 'queuetable.php'; ?>
             
