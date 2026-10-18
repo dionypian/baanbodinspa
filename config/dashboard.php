@@ -627,38 +627,28 @@ function applyQueueFilters() {
         // 1. เช็กเงื่อนไขชื่อหมอ
         let matchStaff = !selectedStaffName || staffText.includes(selectedStaffName);
 
-        // 2. เช็กเงื่อนไขช่วงเวลาจอง
-        let matchTime = true;
-        if (selectedTimeRange) {
-            matchTime = false;
+        // ซ่อนคิวที่อยู่นอกช่วงเวลาที่เลือก โดยใช้เวลาเริ่มต้นของคิว
+        const queueBookings = row.querySelectorAll('.queue-booking');
+        let matchTime = !selectedTimeRange;
 
-            // วนลูปอ่านเฉพาะคอลัมน์รอบคิว (เริ่มตั้งแต่ index 3 ข้าม index 2 ซึ่งเป็นเวลาเข้างาน)
-            for (let i = 3; i < row.children.length - 5; i++) {
-                const cellText = row.children[i] ? row.children[i].textContent.trim() : '';
-                if (!cellText) continue;
+        queueBookings.forEach(booking => {
+            const [hours, minutes] = booking.dataset.bookingTime.split(':').map(Number);
+            const bookingMinutes = (hours * 60) + minutes;
+            let matchesRange = true;
 
-                // ดึงเฉพาะเวลาเริ่มต้นจองคิว (ตัวเลขคู่แรกของคิว เช่น "14:00")
-                const timeMatch = cellText.match(/^([01]?\d|2[0-3]):[0-5]\d/);
-                if (timeMatch) {
-                    const startHour = parseInt(timeMatch[0].split(':')[0]);
-
-                    if (selectedTimeRange === 'morning' && startHour >= 10 && startHour < 13) {
-                        matchTime = true;
-                        break;
-                    }
-                    if (selectedTimeRange === 'afternoon' && startHour >= 13 && startHour < 17) {
-                        matchTime = true;
-                        break;
-                    }
-                    if (selectedTimeRange === 'evening' && startHour >= 17 && startHour <= 22) {
-                        matchTime = true;
-                        break;
-                    }
-                }
+            if (selectedTimeRange === 'morning') {
+                matchesRange = bookingMinutes >= 10 * 60 && bookingMinutes < 13 * 60;
+            } else if (selectedTimeRange === 'afternoon') {
+                matchesRange = bookingMinutes >= 13 * 60 && bookingMinutes < 17 * 60;
+            } else if (selectedTimeRange === 'evening') {
+                matchesRange = bookingMinutes >= 17 * 60 && bookingMinutes <= 22 * 60;
             }
-        }
 
-        // แสดงผลแถวเฉพาะเมื่อตรงตามเงื่อนไขทั้งชื่อหมอและช่วงเวลา
+            booking.hidden = !matchesRange;
+            if (matchesRange) matchTime = true;
+        });
+
+        // แสดงเฉพาะหมอที่มีคิวอยู่ในช่วงเวลานั้น และซ่อนคิวอื่นในแถวเดียวกันด้วย
         row.style.display = (matchStaff && matchTime) ? '' : 'none';
     });
 }

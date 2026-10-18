@@ -179,7 +179,7 @@
 
                         <!-- แสดงคิวรอบต่างๆ -->
                         <?php for ($i = 0; $i < $max_rounds; $i++): ?>
-                            <td class="border border-gray-400 p-1.5 align-top">
+                            <td class="queue-round-cell border border-gray-400 p-1.5 align-top">
                                 <?php if (isset($q_list[$i])): 
                                         $qi = $q_list[$i];
                                         
@@ -194,7 +194,7 @@
                                         $method = strtolower(trim($qi['payment_method'] ?? ''));
                                         $coupon_code = !empty($qi['coupon_code']) ? trim($qi['coupon_code']) : '';
                                     ?>
-                                        <div class="overflow-hidden text-left">
+                                        <div class="queue-booking overflow-hidden text-left" data-booking-time="<?= htmlspecialchars($qi['booking_time'], ENT_QUOTES, 'UTF-8') ?>">
                                             <!-- เวลาเริ่ม - เสร็จ -->
                                             <div class="font-bold text-[18px] text-[#382214] flex justify-between items-center gap-1">
                                                 <span class="whitespace-nowrap"><?= $start_t ?> - <?= $end_t ?></span>
