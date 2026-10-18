@@ -26,7 +26,9 @@ $min_booking_time = '10:00';
 $opentime = '10:00';
 $closetime = '22:00';
 $error_message = '';
-$step = isset($_POST['step']) ? (int)$_POST['step'] : 1;
+$step = isset($_POST['step']) ? (int)$_POST['step'] : (int)($_GET['step'] ?? 1);
+$booking_error = $_SESSION['booking_error'] ?? '';
+unset($_SESSION['booking_error']);
 
 // --- STEP 1 -> STEP 2 ---
 if ($step === 2 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['booking_date'])) {
@@ -150,11 +152,14 @@ $has_phone  = (!empty($user_phone) && strlen($user_phone) >= 9) ? 'true' : 'fals
 // ดึงคูปองของลูกค้าที่ยังไม่ได้ใช้งาน (used = 0)
 // ดึง service_id ทั้งหมดที่ลูกค้าเลือกใน Session
 $booked_service_ids = [];
+$booked_service_counts = [];
 $session_items = $_SESSION['booking']['items'] ?? [];
 foreach ($session_items as $item) {
     if (!empty($item['service_ids']) && is_array($item['service_ids'])) {
         foreach ($item['service_ids'] as $s_id) {
-            $booked_service_ids[] = (int)$s_id;
+            $service_id = (int)$s_id;
+            $booked_service_ids[] = $service_id;
+            $booked_service_counts[$service_id] = ($booked_service_counts[$service_id] ?? 0) + 1;
         }
     }
 }
@@ -513,14 +518,14 @@ if (!empty($booked_service_ids) && $user_id > 0) {
                             <span class="text-lg text-[#5A3A29]"><?= number_format($total_price) ?> บาท</span>
                         </div>
 
-                        <!-- เลือกคูปองสำหรับใช้ส่วนลด (รองรับหลายใบ) -->
+                        <!-- เลือกคูปองสำหรับใช้ส่วนลด -->
                         <?php if (!empty($my_coupons)): ?>
                             <div class="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200 text-left space-y-2">
-                                <label class="font-bold text-[#382214] text-xs block">🎟️ เลือกใช้คูปองของคุณ (เลือกได้หลายใบ):</label>
+                                <label class="font-bold text-[#382214] text-xs block">🎟️ เลือกใช้คูปองของคุณ (เลือกได้ตามจำนวนบริการที่จอง):</label>
                                 <div class="space-y-1.5 max-h-40 overflow-y-auto p-1">
                                     <?php foreach ($my_coupons as $cp): ?>
-                                        <label class="flex items-center space-x-2 text-xs text-[#382214] cursor-pointer bg-white p-2 rounded-lg border border-gray-200 hover:bg-amber-100/50">
-                                            <input type="checkbox" name="use_coupon_ids[]" value="<?= $cp['id'] ?>" form="saveBookingForm" class="w-4 h-4 text-[#382214] rounded focus:ring-[#382214]">
+                                        <label class="coupon-option flex items-center space-x-2 text-xs text-[#382214] cursor-pointer bg-white p-2 rounded-lg border border-gray-200 hover:bg-amber-100/50">
+                                            <input type="checkbox" name="use_coupon_ids[]" value="<?= (int)$cp['id'] ?>" data-service-id="<?= (int)$cp['service_id'] ?>" form="saveBookingForm" class="coupon-checkbox w-4 h-4 text-[#382214] rounded focus:ring-[#382214]">
                                             <span>คูปอง [<b><?= htmlspecialchars($cp['coupon_code']) ?></b>] - <?= htmlspecialchars($cp['service_name'] ?? 'คูปองบริการ' ) ?> <?= htmlspecialchars($cp['duration']) ?> นาที</span>
                                         </label>
                                     <?php endforeach; ?>
@@ -556,6 +561,19 @@ if (!empty($booked_service_ids) && $user_id > 0) {
 
         </div>
     </main>
+
+    <?php if ($booking_error !== ''): ?>
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" role="alertdialog" aria-modal="true" aria-labelledby="coupon-error-title">
+            <div class="w-full max-w-sm rounded-2xl border border-red-200 bg-white p-6 text-center shadow-2xl">
+                <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-2xl text-red-600">!</div>
+                <h2 id="coupon-error-title" class="mb-2 text-lg font-bold text-[#382214]">ไม่สามารถใช้คูปองได้</h2>
+                <p class="mb-5 text-sm text-gray-700"><?= htmlspecialchars($booking_error, ENT_QUOTES, 'UTF-8') ?></p>
+                <button type="button" onclick="this.closest('[role=alertdialog]').remove()" class="rounded-xl bg-[#382214] px-5 py-2 text-sm font-medium text-white hover:bg-[#5A3A29]">
+                    กลับไปตรวจสอบคูปอง
+                </button>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <!-- 🟢 MODAL POPUP SELECT SERVICE -->
     <div x-show="openModal" 
@@ -735,6 +753,42 @@ if (!empty($booked_service_ids) && $user_id > 0) {
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            const couponServiceLimits = <?= json_encode(
+                $booked_service_counts,
+                JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+            ) ?>;
+            const couponCheckboxes = Array.from(document.querySelectorAll('.coupon-checkbox'));
+
+            function updateCouponAvailability() {
+                const selectedCounts = {};
+                couponCheckboxes.forEach(checkbox => {
+                    if (checkbox.checked) {
+                        const serviceId = checkbox.dataset.serviceId;
+                        selectedCounts[serviceId] = (selectedCounts[serviceId] || 0) + 1;
+                    }
+                });
+
+                couponCheckboxes.forEach(checkbox => {
+                    const serviceId = checkbox.dataset.serviceId;
+                    const limit = Number(couponServiceLimits[serviceId] || 0);
+                    const atLimit = (selectedCounts[serviceId] || 0) >= limit;
+                    checkbox.disabled = !checkbox.checked && atLimit;
+                    checkbox.closest('.coupon-option').classList.toggle(
+                        'opacity-50',
+                        checkbox.disabled
+                    );
+                    checkbox.closest('.coupon-option').classList.toggle(
+                        'cursor-not-allowed',
+                        checkbox.disabled
+                    );
+                });
+            }
+
+            couponCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', updateCouponAvailability);
+            });
+            updateCouponAvailability();
+
             flatpickr("#booking_date", {
                 locale: "th",
                 dateFormat: "Y-m-d",

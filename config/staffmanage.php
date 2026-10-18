@@ -146,7 +146,7 @@ $conn_srv->close();
                                         data-birthdate="<?= htmlspecialchars($row['birthdate'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
                                         data-dayoff="<?= htmlspecialchars($row['day_off'] ?? 'Monday', ENT_QUOTES, 'UTF-8') ?>"
                                         onclick="openEditModal(this)"
-                                        class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-medium transition-colors"
+                                        class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-ml font-medium transition-colors"
                                     >
                                         แก้ไข
                                     </button>

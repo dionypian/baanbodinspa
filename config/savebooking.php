@@ -10,6 +10,10 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once 'db-connect.php';
 require_once 'auto_assign.php';
 
+class CouponSelectionException extends RuntimeException
+{
+}
+
 $cus_id         = $_SESSION['cus_id'] ?? $_SESSION['user_id'] ?? null;
 $booking_date   = $_SESSION['booking']['booking_date'] ?? '';
 $booking_time   = $_SESSION['booking']['booking_time'] ?? '';
@@ -169,7 +173,9 @@ try {
             }
 
             if ($matched_key === null) {
-                throw new Exception("คูปองรหัส [" . $cp_data['coupon_code'] . "] เลือกเกินจำนวนบริการประเภทนี้ที่คุณจอง");
+                throw new CouponSelectionException(
+                    "คูปองรหัส [" . $cp_data['coupon_code'] . "] เลือกเกินจำนวนบริการประเภทนี้ที่คุณจอง"
+                );
             }
 
             // ทำเครื่องหมายว่ารายการบริการนี้ใช้สิทธิ์คูปองเรียบร้อยแล้ว
@@ -208,6 +214,13 @@ try {
     header("Location: bookdetail.php");
     exit;
 
+} catch (CouponSelectionException $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    $_SESSION['booking_error'] = $e->getMessage();
+    header("Location: booking.php?step=3");
+    exit;
 } catch (Exception $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
