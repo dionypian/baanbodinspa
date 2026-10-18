@@ -560,6 +560,76 @@ if ($active_tab === 'summary') {
             }
         }));
     });
+
+
+    
+</script>
+
+<!-- filter หมอนวดและวันที่ ใน Quatable -->
+<script>
+function applyQueueFilters() {
+    const staffSelect = document.getElementById('filter_staff');
+    const timeSelect = document.getElementById('filter_time_range');
+
+    const selectedStaffName = staffSelect.value.trim().toLowerCase();
+    const selectedTimeRange = timeSelect.value;
+
+    const table = document.querySelector('#section-summary table');
+    if (!table) return;
+    const rows = table.querySelectorAll('tbody tr');
+
+    rows.forEach(row => {
+        // ข้ามแถวรวม (<tfoot>) หรือแถวไม่มีข้อมูล
+        if (row.children.length <= 1) return;
+
+        // คอลัมน์ index 1 คือ ชื่อหมอ
+        const staffCell = row.children[1];
+        const staffText = staffCell ? staffCell.textContent.toLowerCase() : '';
+
+        // 1. เช็กเงื่อนไขชื่อหมอ
+        let matchStaff = !selectedStaffName || staffText.includes(selectedStaffName);
+
+        // 2. เช็กเงื่อนไขช่วงเวลาจอง
+        let matchTime = true;
+        if (selectedTimeRange) {
+            matchTime = false;
+
+            // วนลูปอ่านเฉพาะคอลัมน์รอบคิว (เริ่มตั้งแต่ index 3 ข้าม index 2 ซึ่งเป็นเวลาเข้างาน)
+            for (let i = 3; i < row.children.length - 5; i++) {
+                const cellText = row.children[i] ? row.children[i].textContent.trim() : '';
+                if (!cellText) continue;
+
+                // ดึงเฉพาะเวลาเริ่มต้นจองคิว (ตัวเลขคู่แรกของคิว เช่น "14:00")
+                const timeMatch = cellText.match(/^([01]?\d|2[0-3]):[0-5]\d/);
+                if (timeMatch) {
+                    const startHour = parseInt(timeMatch[0].split(':')[0]);
+
+                    if (selectedTimeRange === 'morning' && startHour >= 10 && startHour < 13) {
+                        matchTime = true;
+                        break;
+                    }
+                    if (selectedTimeRange === 'afternoon' && startHour >= 13 && startHour < 17) {
+                        matchTime = true;
+                        break;
+                    }
+                    if (selectedTimeRange === 'evening' && startHour >= 17 && startHour <= 22) {
+                        matchTime = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // แสดงผลแถวเฉพาะเมื่อตรงตามเงื่อนไขทั้งชื่อหมอและช่วงเวลา
+        row.style.display = (matchStaff && matchTime) ? '' : 'none';
+    });
+}
+
+function resetQueueFilters() {
+    document.getElementById('filter_staff').value = '';
+    document.getElementById('filter_time_range').value = '';
+    applyQueueFilters();
+}
 </script>
 </body>
 

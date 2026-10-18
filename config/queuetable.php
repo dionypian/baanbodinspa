@@ -4,7 +4,7 @@
     <!-- ตารางการจองคิววันที่ :...                         export to excel -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         
-        <!-- ฝั่งซ้าย: ตารางการจองคิววันที่ + ฟอร์มเลือกวันที่ -->
+        <!-- ฝั่งซ้าย: ตารางการจองคิววันที่ + ฟอร์มเลือกวันที่ + filter -->
         <div class="flex items-center gap-3">
             <label class="text-ml font-bold text-[#382214] whitespace-nowrap">ตารางการจองคิววันที่ :</label>
             <form id="summary_date_form" method="GET" action="dashboard.php" class="flex items-center gap-1">
@@ -14,9 +14,39 @@
                     name="summary_date" 
                     value="<?= htmlspecialchars($summary_date ?? date('Y-m-d')) ?>" 
                     onchange="this.form.submit()"
-                    class="border border-gray-400 rounded-lg px-3 py-1.5 text-sm font-semibold text-[#382214] text-center w-36 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    class="border border-gray-400 rounded-lg px-3 py-1.5 text-sm font-semibold text-[#382214] text-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500">
             </form>
+
+            <!-- Dropdown เลือกชื่อหมอ -->
+            <select id="filter_staff" onchange="applyQueueFilters()" class="border border-gray-400 rounded-lg px-3 py-1.5 text-sm font-semibold text-[#382214] text-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <option value="">-- หมอนวดทั้งหมด --</option>
+                <?php if (!empty($summary_staffs)): ?>
+                    <?php foreach ($summary_staffs as $st): 
+                        $st_name = $st['nickname'] ?? $st['name'];
+                    ?>
+                        <option value="<?= htmlspecialchars($st_name) ?>">
+                            หมอ <?= htmlspecialchars($st_name) ?>
+                        </option>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </select>
+
+            <!-- Dropdown ช่วงเวลา -->
+            <select id="filter_time_range" onchange="applyQueueFilters()" class="border border-gray-400 rounded-lg px-3 py-1.5 text-sm font-semibold text-[#382214] text-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <option value="">-- ช่วงเวลาทั้งหมด --</option>
+                <option value="morning">รอบเช้า (10:00 - 13:00)</option>
+                <option value="afternoon">รอบบ่าย (13:00 - 17:00)</option>
+                <option value="evening">รอบเย็น (17:00 - 22:00)</option>
+            </select>
+
+            <!-- ปุ่มล้างตัวกรอง -->
+            <button type="button" 
+                    onclick="resetQueueFilters()" 
+                    class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-semibold transition-colors border border-gray-300">
+                ล้างตัวกรอง
+            </button>
         </div>
+        
 
         <!-- ฝั่งขวา: ปุ่ม Export to Excel -->
         <div>
@@ -141,15 +171,14 @@
                         <td class="border border-gray-400 p-2 font-bold text-gray-800">
                             <?= htmlspecialchars($st['nickname'] ?? $st['name']) ?>
                         </td>
-                        <!-- แสดงเวลา Check-in -->
+                       <!-- แสดงเวลา Check-in  -->
                         <td class="border border-gray-400 p-2 font-bold text-gray-800">
-                            
                             <?php if (!empty($st['checkin_time'])): ?>
-                                <div class="text-xs font-bold text-emerald-700 mt-0.5">
+                                <div class="text-xs font-bold text-emerald-700">
                                     <?= date('H:i', strtotime($st['checkin_time'])) ?> น.
                                 </div>
                             <?php else: ?>
-                                <div class="text-xs font-bold text-red-500 mt-0.5">
+                                <div class="text-xs font-bold text-red-500">
                                     ยังไม่เช็กอิน
                                 </div>
                             <?php endif; ?>
