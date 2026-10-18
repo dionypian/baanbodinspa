@@ -135,18 +135,17 @@ $conn_srv->close();
                                         บริการ
                                     </button>
 
-                                    <!-- 🟢 แก้ไขการส่งค่าอาร์กิวเมนต์แบบแยกตัวแปร ชัดเจน 100% ไม่พึ่ง JSON String -->
+
                                     <button
                                         type="button"
-                                        onclick="openEditModal(
-                                            <?= (int)$row['staff_id'] ?>, 
-                                            '<?= htmlspecialchars($row['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>', 
-                                            '<?= htmlspecialchars($row['nickname'] ?? '', ENT_QUOTES, 'UTF-8') ?>', 
-                                            '<?= htmlspecialchars($row['phone'] ?? '', ENT_QUOTES, 'UTF-8') ?>', 
-                                            '<?= htmlspecialchars($row['gender'] ?? 'male', ENT_QUOTES, 'UTF-8') ?>', 
-                                            '<?= htmlspecialchars($row['birthdate'] ?? '', ENT_QUOTES, 'UTF-8') ?>', 
-                                            '<?= htmlspecialchars($row['day_off'] ?? 'Monday', ENT_QUOTES, 'UTF-8') ?>'
-                                        )"
+                                        data-id="<?= $row['staff_id'] ?>"
+                                        data-name="<?= htmlspecialchars($row['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                        data-nickname="<?= htmlspecialchars($row['nickname'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                        data-phone="<?= htmlspecialchars($row['phone'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                        data-gender="<?= htmlspecialchars($row['gender'] ?? 'male', ENT_QUOTES, 'UTF-8') ?>"
+                                        data-birthdate="<?= htmlspecialchars($row['birthdate'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                        data-dayoff="<?= htmlspecialchars($row['day_off'] ?? 'Monday', ENT_QUOTES, 'UTF-8') ?>"
+                                        onclick="openEditModal(this)"
                                         class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-medium transition-colors"
                                     >
                                         แก้ไข
@@ -333,16 +332,18 @@ $conn_srv->close();
         </div>
     </div>
 
-    <div id="editStaffModal" class="modal-backdrop fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+   <div id="editStaffModal" class="modal-backdrop fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div class="modal-content bg-[#FDFBF7] rounded-2xl p-6 w-full max-w-md shadow-2xl border border-[#E8E2D5]">
             <div class="flex justify-between items-center pb-3 border-b border-[#E8E2D5] mb-4">
                 <h3 class="text-xl font-bold text-[#382214]">แก้ไขข้อมูลพนักงาน</h3>
                 <button onclick="closeModal('editStaffModal')" class="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
             </div>
-                
+
+            <!-- ✅ ต้องมั่นใจว่า <form> เปิดครอบตั้งแต่ตรงนี้ -->
             <form action="editstaff.php" method="POST" class="space-y-4">
-                <!-- Hidden Input สำหรับเก็บ staff_id -->
-                <input type="hidden" id="edit_staff_id" name="staff_id" value="">
+
+                <!-- ✅ และ <input hidden> ต้องอยู่ข้างในฟอร์มนี้ ห้ามหลุดออกนอกฟอร์ม -->
+                <input type="hidden" id="edit_staff_form_staff_id" name="staff_id">
 
                 <div>
                     <label class="block text-sm font-semibold text-[#382214] mb-1">ชื่อ-นามสกุล <span class="text-red-500">*</span></label>
@@ -425,7 +426,7 @@ $conn_srv->close();
                         บันทึกการแก้ไข
                     </button>
                 </div>
-            </form>
+            </form> <!-- ✅ ปิดฟอร์มตรงนี้ -->
         </div>
     </div>
 
@@ -462,35 +463,30 @@ $conn_srv->close();
 </section>
 
 <script>
-    // 🟢 ปรับเปลี่ยนลายเซ็นฟังก์ชันให้รับอาร์กิวเมนต์แยกกันโดยตรง 100%
-    function openEditModal(staffId, name, nickname, phone, gender, birthdate, dayOff) {
-        // 1. กำหนดค่า ID ชัดเจนทันที
-        const idInput = document.getElementById('edit_staff_id');
-        if (idInput) {
-            idInput.value = staffId;
-        }
+    function openEditModal(btn) {
+        // ดึงค่าจากปุ่มที่กดโดยตรง (ตรวจสอบชื่อ attribute ให้ตรงกับใน HTML)
+        const staffId   = btn.getAttribute('data-id');
+        const name      = btn.getAttribute('data-name');
+        const nickname  = btn.getAttribute('data-nickname');
+        const phone     = btn.getAttribute('data-phone');
+        const gender    = btn.getAttribute('data-gender');
+        const birthdate = btn.getAttribute('data-birthdate');
+        const dayOff    = btn.getAttribute('data-dayoff'); // ใช้ data-dayoff ให้ตรงกับปุ่ม
 
-        // 2. กำหนดค่าฟิลด์ต่างๆ
-        if (document.getElementById('edit_staff_name')) {
-            document.getElementById('edit_staff_name').value = name || nickname || '';
-        }
-        if (document.getElementById('edit_nickname')) {
-            document.getElementById('edit_nickname').value = nickname || '';
-        }
-        if (document.getElementById('edit_phone')) {
-            document.getElementById('edit_phone').value = phone || '';
-        }
-        if (document.getElementById('edit_gender')) {
-            document.getElementById('edit_gender').value = gender || 'male';
-        }
-        if (document.getElementById('edit_day_off')) {
-            document.getElementById('edit_day_off').value = dayOff || 'Monday';
-        }
+        console.log("📌 ได้รับ Staff ID แล้ว:", staffId); // เช็กใน Console (F12) จะต้องเห็นเลข ID ของพนักงานคนนั้นเด้งขึ้นมา
 
-        // 3. ตั้งค่า DatePicker
+        // ยัดค่าใส่ Input Hidden และช่องฟอร์มต่างๆ
+        document.getElementById('edit_staff_form_staff_id').value = staffId;
+        document.getElementById('edit_staff_name').value = name;
+        document.getElementById('edit_nickname').value = nickname;
+        document.getElementById('edit_phone').value = phone;
+        document.getElementById('edit_gender').value = gender;
+        document.getElementById('edit_day_off').value = dayOff;
+
         const birthInput = document.getElementById('edit_birthdate_picker');
-        if (birthInput) {
-            birthInput.value = birthdate || '';
+        if (birthInput) birthInput.value = birthdate;
+
+        try {
             if (typeof editDatePicker !== 'undefined' && editDatePicker) {
                 if (birthdate) {
                     editDatePicker.setDate(birthdate);
@@ -498,19 +494,17 @@ $conn_srv->close();
                     editDatePicker.clear();
                 }
             }
+        } catch (err) {
+            console.warn('DatePicker notice:', err);
         }
 
-        // 4. เปิด Modal
+        // เปิด Modal
         openModal('editStaffModal');
     }
 
     function openDeleteModal(staffId, staffName) {
-        const idInput   = document.getElementById('delete_staff_id');
-        const nameLabel = document.getElementById('delete_staff_name');
-
-        if (idInput)   idInput.value = staffId;
-        if (nameLabel) nameLabel.textContent = staffName;
-
+        document.getElementById('delete_staff_id').value = staffId;
+        document.getElementById('delete_staff_name').textContent = staffName;
         openModal('deleteStaffModal');
     }
 </script>
