@@ -47,7 +47,6 @@
             </button>
         </div>
         
-
         <!-- ฝั่งขวา: ปุ่ม Export to Excel -->
         <div>
             <a href="export_excel.php?summary_date=<?= htmlspecialchars($summary_date ?? date('Y-m-d')) ?>" 
@@ -65,8 +64,6 @@
         ตารางการจองคิววันที่ <?= date('d/m/Y', strtotime($summary_date ?? date('Y-m-d'))) ?>
     </div>
 
-
-
     <?php 
     $max_rounds = 0;
     if (!empty($summary_staffs)) {
@@ -74,8 +71,6 @@
             $st_id = $st['staff_id'];
             $q_list = $staff_queues[$st_id] ?? [];
             
-            if (empty($q_list)) continue;
-
             $count = count($q_list);
             if ($count > $max_rounds) {
                 $max_rounds = $count;
@@ -97,7 +92,7 @@
                     <th class="border border-gray-400 p-2.5 w-28">ชื่อหมอ</th>
                     <th class="border border-gray-400 p-2.5 w-28">เวลาเข้างาน</th>
                     
-                    <!-- 🟢 แสดงหัวตารางรอบที่ 1 ถึงรอบสูงสุดจริง Dynamic -->
+                    <!-- แสดงหัวตารางรอบที่ 1 ถึงรอบสูงสุดจริง Dynamic -->
                     <?php for ($r = 1; $r <= $max_rounds; $r++): ?>
                         <th class="border border-gray-400 p-2.5 min-w-[150px]">รอบที่ <?= $r ?></th>
                     <?php endfor; ?>
@@ -124,16 +119,12 @@
                     $grand_coupon = 0;
                     $grand_hand_fee = 0;
                     $no = 1;
-                    $has_active_staff = false;
 
                     if (!empty($summary_staffs)):
                         foreach ($summary_staffs as $st): 
                             $st_id = $st['staff_id'];
                             $q_list = $staff_queues[$st_id] ?? [];
 
-                            if (empty($q_list)) continue;
-
-                            $has_active_staff = true;
                             $cash = 0; $transfer = 0; $credit = 0; $coupon = 0; $hand_fee = 0;
 
                             foreach ($q_list as $q) {
@@ -141,9 +132,11 @@
                                 $price = (float)($q['total_price'] ?? $q['price'] ?? 0);
                                 
                                 // 2. ดึงวิธีชำระเงินและแปลงเป็นตัวพิมพ์เล็ก
-                                $method = strtolower(trim($q['payment_method'] ?? 'cash'));
-
+                                $method = strtolower(trim($q['payment_method'] ?? ''));
                                 // 3. ตรวจสอบแยกหมวดหมู่การชำระเงิน
+                                if (empty($method)) {
+                                    continue; 
+                                }
                                 if ($method === 'cash' || $method === 'เงินสด') {
                                     $cash += $price;
                                 } elseif ($method === 'transfer' || $method === 'โอน' || $method === 'promptpay') {
@@ -157,7 +150,8 @@
                                 }
 
                                 // 4. ดึงค่ามือหมอรวมของคิว
-                                $hand_fee += (int)($q['total_hand_fee'] ?? $q['hand_fee_amount'] ?? $q['commission'] ?? 0);
+                                // $hand_fee += (int)($q['total_hand_fee'] ?? $q['hand_fee_amount'] ?? $q['hand_fee'] ?? 0);
+                                $hand_fee += (int)($q['hand_fee'] ?? 0);
                             }
 
                             $grand_cash += $cash;
@@ -188,44 +182,44 @@
                         <?php for ($i = 0; $i < $max_rounds; $i++): ?>
                             <td class="border border-gray-400 p-1.5 align-top">
                                 <?php if (isset($q_list[$i])): 
-                                    $qi = $q_list[$i];
-                                    
-                                    // 1. คำนวณเวลาเริ่ม - เวลาเสร็จ
-                                    $start_t  = date('H:i', strtotime($qi['booking_time']));
-                                    $duration = (int)($qi['total_duration'] ?? $qi['duration'] ?? 60);
-                                    $end_t    = date('H:i', strtotime("+{$duration} minutes", strtotime($qi['booking_time'])));
-                                    
-                                    // 2. ชื่อบริการ และ ราคารวม
-                                    $service_name = !empty($qi['service_names']) ? $qi['service_names'] : ($qi['service_name'] ?? 'ไม่ระบุบริการ');
-                                    $price        = (float)($qi['total_price'] ?? $qi['price'] ?? 0);
-                                    $method = strtolower(trim($qi['payment_method'] ?? ''));
-                                    $coupon_code = !empty($qi['coupon_code']) ? trim($qi['coupon_code']) : '';
-                                ?>
-                                    <div class="overflow-hidden text-left">
-                                        <!-- เวลาเริ่ม - เสร็จ -->
-                                        <div class="font-bold text-[18px] text-[#382214] flex justify-between items-center gap-1">
-                                            <span class="whitespace-nowrap"><?= $start_t ?> - <?= $end_t ?></span>
-                                            <?php if ($method === 'coupon' || $method === 'คูปอง'): ?>
-                                                <span class="text-amber-900 px-1.5 py-0.5 rounded font-bold whitespace-nowrap text-[18px]">
-                                                    <?= !empty($coupon_code) ? htmlspecialchars($coupon_code) : '' ?>
-                                                </span>
-                                            <?php else: ?>
-                                                <span class="text-[#047857] font-bold whitespace-nowrap"><?= number_format($price) ?>฿</span>
-                                            <?php endif; ?>
-                                        </div>
-                                        <div class="p-0.5 space-y-2">
-                                            <!-- ชื่อบริการ + ระยะเวลารวม -->
-                                            <div class="text-base font-semibold text-gray-800 leading-tight">
-                                                <?= htmlspecialchars($service_name) ?> 
-                                                <span class="text-[#382214] font-bold"><?= $duration ?> นาที</span>
+                                        $qi = $q_list[$i];
+                                        
+                                        // 1. คำนวณเวลาเริ่ม - เวลาเสร็จ
+                                        $start_t  = date('H:i', strtotime($qi['booking_time']));
+                                        $duration = (int)($qi['total_duration'] ?? $qi['duration'] ?? 60);
+                                        $end_t    = date('H:i', strtotime("+{$duration} minutes", strtotime($qi['booking_time'])));
+                                        
+                                        // 2. ชื่อบริการรวม และ ราคารวม
+                                        $service_name = !empty($qi['service_names']) ? $qi['service_names'] : ($qi['service_name'] ?? 'ไม่ระบุบริการ');
+                                        $price        = (float)($qi['total_price'] ?? $qi['price'] ?? 0);
+                                        $method = strtolower(trim($qi['payment_method'] ?? ''));
+                                        $coupon_code = !empty($qi['coupon_code']) ? trim($qi['coupon_code']) : '';
+                                    ?>
+                                        <div class="overflow-hidden text-left">
+                                            <!-- เวลาเริ่ม - เสร็จ -->
+                                            <div class="font-bold text-[18px] text-[#382214] flex justify-between items-center gap-1">
+                                                <span class="whitespace-nowrap"><?= $start_t ?> - <?= $end_t ?></span>
+                                                <?php if ($method === 'coupon' || $method === 'คูปอง'): ?>
+                                                    <span class="text-amber-900 px-1.5 py-0.5 rounded font-bold whitespace-nowrap text-[18px]">
+                                                        <?= !empty($coupon_code) ? htmlspecialchars($coupon_code) : '' ?>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="text-[#047857] font-bold whitespace-nowrap"><?= number_format($price) ?>฿</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="p-0.5 space-y-2">
+                                                <!-- ชื่อบริการรวม + ระยะเวลารวม -->
+                                                <div class="text-base font-semibold text-gray-800 leading-tight">
+                                                    <?= htmlspecialchars($service_name) ?> 
+                                                    <span class="text-[#382214] font-bold"><?= $duration ?> นาที</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                <?php endif; ?>
+                                    <?php endif; ?>
                             </td>
                         <?php endfor; ?>
 
-                        <!-- รายรับ (ใส่ 0 เสมอเมื่อไม่มีข้อมูล เพื่อให้คอลัมน์กว้างเท่ากัน) -->
+                        <!-- รายรับ -->
                         <td class="border border-gray-400 p-2 text-right w-24 font-medium"><?= number_format($cash) ?></td>
                         <td class="border border-gray-400 p-2 text-right w-24 font-medium"><?= number_format($transfer) ?></td>
                         <td class="border border-gray-400 p-2 text-right w-24 font-medium"><?= number_format($credit) ?></td>
@@ -236,14 +230,11 @@
                     </tr>
                     <?php 
                         endforeach; 
-                    endif;
-
-                    // กรณีไม่มีหมอนวดคนไหนมีคิวเลยในวันที่เลือก
-                    if (!$has_active_staff):
+                    else:
                     ?>
                     <tr>
-                        <td colspan="<?= 2 + $max_rounds + 5 ?>" class="p-6 text-center text-gray-500">
-                            ไม่มีรายการจองคิวในวันที่ <?= date('d/m/Y', strtotime($summary_date ?? date('Y-m-d'))) ?>
+                        <td colspan="<?= 3 + $max_rounds + 5 ?>" class="p-6 text-center text-gray-500 font-bold">
+                            ยังไม่มีพนักงานเช็กอินเข้างานในวันที่ <?= date('d/m/Y', strtotime($summary_date ?? date('Y-m-d'))) ?>
                         </td>
                     </tr>
                     <?php endif; ?>
@@ -251,8 +242,7 @@
 
             <tfoot>
                 <tr class="bg-gray-100 font-bold border-t border-gray-400 text-gray-800">
-                    <!-- 🟢 คำนวณ colspan Dynamic ตามจำนวนคอลัมน์ลำดับ + ชื่อหมอ + รอบคิวทั้งหมด -->
-                    <td colspan="<?= 2 + $max_rounds ?>" class="border border-gray-400 p-2.5 text-center">รวม</td>
+                    <td colspan="<?= 3 + $max_rounds ?>" class="border border-gray-400 p-2.5 text-center">รวม</td>
                     <td class="border border-gray-400 p-2 text-right text-emerald-700"><?= number_format($grand_cash) ?></td>
                     <td class="border border-gray-400 p-2 text-right text-emerald-700"><?= number_format($grand_transfer) ?></td>
                     <td class="border border-gray-400 p-2 text-right text-emerald-700"><?= number_format($grand_credit) ?></td>
@@ -262,4 +252,5 @@
             </tfoot>
         </table>
     </div>
+    
 </section>

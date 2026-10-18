@@ -29,7 +29,7 @@ $sql_summary_bookings = "
         SUM(srv.duration) as total_duration,
         SUM(srv.price) as total_price,
         SUM(COALESCE(srv.commission, 0)) as total_hand_fee,
-        COALESCE(p.payment_method, b.payment_method, 'cash') as payment_method,
+        COALESCE(p.payment_method, b.payment_method) as payment_method,
         p.coupon_code
     FROM bookings b
     LEFT JOIN booking_items bi ON b.id = bi.booking_id
@@ -131,7 +131,10 @@ echo "\xEF\xBB\xBF";
 
                         foreach ($q_list as $q) {
                             $price = (float)($q['total_price'] ?? 0);
-                            $method = strtolower(trim($q['payment_method'] ?? 'cash'));
+                            $method = strtolower(trim($q['payment_method'] ?? ''));
+                            if (empty($method)) {
+                                    continue; 
+                                }
 
                             if ($method === 'cash' || $method === 'เงินสด') {
                                 $cash += $price;

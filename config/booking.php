@@ -21,7 +21,8 @@ foreach ($staff_skills_raw as $row) {
 
 date_default_timezone_set('Asia/Bangkok');
 $today = date('Y-m-d');
-$min_booking_time = date('H:i', strtotime('+1 hour'));
+// $min_booking_time = date('H:i', strtotime('+1 hour'));
+$min_booking_time = '10:00';
 $opentime = '10:00';
 $closetime = '22:00';
 $error_message = '';
@@ -42,10 +43,15 @@ if ($step === 2 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bookin
     } elseif ($selected_time < $opentime || $selected_time > $closetime) {
         $error_message = 'กรุณาเลือกเวลาในช่วงทำการ (' . $opentime . ' - ' . $closetime . ' น.)';
         $step = 1;
-    } elseif ($selected_date === $today && $selected_time < $min_booking_time) {
+    
+    } 
+    /*
+    elseif ($selected_date === $today && $selected_time < $min_booking_time) {
         $error_message = 'ต้องทำการจองล่วงหน้าอย่างน้อย 1 ชั่วโมง';
         $step = 1;
-    } else {
+    } 
+    */
+    else {
         $_SESSION['booking']['customer_count'] = $count;
         $_SESSION['booking']['booking_date']   = $selected_date;
         $_SESSION['booking']['booking_time']   = $selected_time;
@@ -140,6 +146,38 @@ $stmt_user->execute([':id' => $user_id]);
 $user_data = $stmt_user->fetch(PDO::FETCH_ASSOC);
 $user_phone = trim($user_data['phone'] ?? '');
 $has_phone  = (!empty($user_phone) && strlen($user_phone) >= 9) ? 'true' : 'false';
+
+// ดึงคูปองของลูกค้าที่ยังไม่ได้ใช้งาน (used = 0)
+// ดึง service_id ทั้งหมดที่ลูกค้าเลือกใน Session
+$booked_service_ids = [];
+$session_items = $_SESSION['booking']['items'] ?? [];
+foreach ($session_items as $item) {
+    if (!empty($item['service_ids']) && is_array($item['service_ids'])) {
+        foreach ($item['service_ids'] as $s_id) {
+            $booked_service_ids[] = (int)$s_id;
+        }
+    }
+}
+$booked_service_ids = array_unique($booked_service_ids);
+
+$my_coupons = [];
+if (!empty($booked_service_ids) && $user_id > 0) {
+    // สร้างตัวแปร ? ตามจำนวน service_id ที่จอง
+    $in_clause = implode(',', array_fill(0, count($booked_service_ids), '?'));
+    
+    $sql_coupons = "
+        SELECT cc.id, cc.coupon_code, cc.service_id, s.name as service_name, s.duration 
+        FROM cus_coupon cc
+        LEFT JOIN allservices s ON cc.service_id = s.id
+        WHERE cc.cus_id = ? AND cc.used = 0 AND cc.service_id IN ($in_clause)
+    ";
+    
+    $stmt_coupons = $pdo->prepare($sql_coupons);
+    $params = array_merge([$user_id], $booked_service_ids);
+    $stmt_coupons->execute($params);
+    $my_coupons = $stmt_coupons->fetchAll(PDO::FETCH_ASSOC);
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -474,6 +512,21 @@ $has_phone  = (!empty($user_phone) && strlen($user_phone) >= 9) ? 'true' : 'fals
                             <span>ราคารวมทั้งสิ้น:</span>
                             <span class="text-lg text-[#5A3A29]"><?= number_format($total_price) ?> บาท</span>
                         </div>
+
+                        <!-- เลือกคูปองสำหรับใช้ส่วนลด (รองรับหลายใบ) -->
+                        <?php if (!empty($my_coupons)): ?>
+                            <div class="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200 text-left space-y-2">
+                                <label class="font-bold text-[#382214] text-xs block">🎟️ เลือกใช้คูปองของคุณ (เลือกได้หลายใบ):</label>
+                                <div class="space-y-1.5 max-h-40 overflow-y-auto p-1">
+                                    <?php foreach ($my_coupons as $cp): ?>
+                                        <label class="flex items-center space-x-2 text-xs text-[#382214] cursor-pointer bg-white p-2 rounded-lg border border-gray-200 hover:bg-amber-100/50">
+                                            <input type="checkbox" name="use_coupon_ids[]" value="<?= $cp['id'] ?>" form="saveBookingForm" class="w-4 h-4 text-[#382214] rounded focus:ring-[#382214]">
+                                            <span>คูปอง [<b><?= htmlspecialchars($cp['coupon_code']) ?></b>] - <?= htmlspecialchars($cp['service_name'] ?? 'คูปองบริการ') ?></span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                     </div>
 
                     <!-- 🟢 ฟอร์มซ่อนสำหรับยิงข้อมูลไปบันทึก -->

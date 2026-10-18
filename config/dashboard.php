@@ -63,7 +63,8 @@ $sql_bookings = "SELECT b.*,
                         s.nickname as staff_nickname, s.name as staff_name,
                         srv.name as default_service_name, srv.duration as default_duration, srv.price as default_price,
                         p.payment_method as payment_method,
-                        p.slip_image as slip_image
+                        p.slip_image as slip_image,
+                        p.coupon_code as coupon_code
                  FROM bookings b
                  LEFT JOIN customers c ON b.cus_id = c.cus_id
                  LEFT JOIN staffs s ON b.staff_id = s.staff_id
@@ -74,7 +75,8 @@ if (!empty($where_clauses)) {
     $sql_bookings .= " WHERE " . implode(" AND ", $where_clauses);
 }
 
-$sql_bookings .= " ORDER BY b.created_at DESC";
+// 🟢 เพิ่ม GROUP BY b.id ตรงนี้ เพื่อยุบแถวที่ซ้ำจากการ JOIN ตารางอื่น
+$sql_bookings .= " GROUP BY b.id ORDER BY b.created_at DESC";
 
 // 🟢 ดึงข้อมูลรายการคิวจองที่กรองแล้วลงตัวแปร $bookings
 $stmt_b = $pdo->prepare($sql_bookings);
@@ -143,53 +145,57 @@ function getAvailableStaffs($pdo, $booking_date, $booking_time, $duration_minute
 if ($active_tab === 'summary') {
     $summary_date = $_GET['summary_date'] ?? date('Y-m-d');
 
-    // 🟢 ปรับ SQL ให้ดึงหมอนวดและ JOIN เวลา Check-in ของวันนั้น พร้อมเรียงลำดับตามเวลาเช็กอิน (ใครมาก่อนขึ้นก่อน)
+    // 1. ดึงเฉพาะพนักงานที่เช็กอินแล้วในวันนั้นเท่านั้น
     $sql_summary_staffs = "
         SELECT s.*, c.checkin_time 
-        FROM staffs s
-        LEFT JOIN checkin c ON s.staff_id = c.staff_id AND DATE(c.checkin_time) = :sum_date
-        ORDER BY 
-            CASE WHEN c.checkin_time IS NULL THEN 1 ELSE 0 END ASC, 
-            c.checkin_time ASC, 
-            s.staff_id ASC
+        FROM checkin c
+        INNER JOIN staffs s ON c.staff_id = s.staff_id
+        WHERE DATE(c.checkin_time) = :sum_date
+        ORDER BY c.checkin_time ASC, s.staff_id ASC
     ";
     
     $stmt_staffs = $pdo->prepare($sql_summary_staffs);
     $stmt_staffs->execute([':sum_date' => $summary_date]);
     $summary_staffs = $stmt_staffs->fetchAll(PDO::FETCH_ASSOC);
 
-    // 2. ดึงรายการจองของวันที่เลือก (รวมคิวที่มีหมอรับงาน)
+    // 2. ดึงรายการจองแยกตามพนักงาน และ GROUP BY เวลา เพื่อไม่ให้ชื่อบริการเบิ้ลซ้ำซ้อน
+    $staff_queues = [];
+    
     $sql_summary_bookings = "
-    SELECT b.id as booking_id, 
-        b.staff_id, 
-        b.booking_date, 
-        b.booking_time, 
-        b.status,
-        GROUP_CONCAT(srv.name SEPARATOR ', ') as service_names,
-        SUM(srv.duration) as total_duration,
-        SUM(srv.price) as total_price,
-        SUM(COALESCE(srv.commission, 0)) as total_hand_fee,
-        COALESCE(p.payment_method, b.payment_method, 'cash') as payment_method,
-        p.coupon_code
-    FROM bookings b
-    LEFT JOIN booking_items bi ON b.id = bi.booking_id
-    LEFT JOIN allservices srv ON bi.service_id = srv.id
-    LEFT JOIN payments p ON b.id = p.booking_id
-    WHERE b.booking_date = :sum_date 
-    AND b.status IN ('confirmed', 'completed', 'pending')
-    GROUP BY b.id
-    ORDER BY b.booking_time ASC
-";
+        SELECT 
+            b.id as booking_id,
+            bi.item_id,
+            b.staff_id,
+            b.booking_date,
+            b.booking_time,
+            b.status,
+            s.name as service_name,
+            s.duration,
+            s.price,
+            s.commission as hand_fee,
+            COALESCE(p.payment_method, b.payment_method) as payment_method,
+            p.coupon_code
+        FROM bookings b
+        INNER JOIN booking_items bi ON b.id = bi.booking_id
+        INNER JOIN allservices s ON bi.service_id = s.id
+        LEFT JOIN payments p ON b.id = p.booking_id
+        WHERE b.booking_date = :sum_date 
+        AND b.staff_id = :staff_id
+        AND b.status IN ('confirmed', 'completed', 'pending')
+        GROUP BY b.id, b.staff_id, b.booking_date, b.booking_time, b.status
+        ORDER BY b.booking_time ASC, bi.item_id ASC
+    ";
     
     $stmt_sum = $pdo->prepare($sql_summary_bookings);
-    $stmt_sum->execute([':sum_date' => $summary_date]);
-    $raw_summary_data = $stmt_sum->fetchAll(PDO::FETCH_ASSOC);
 
-    // 3. จัดกลุ่มคิวงานตามหมอนวด (staff_id)
-    $staff_queues = [];
-    foreach ($raw_summary_data as $row) {
-        $st_id = $row['staff_id'];
-        $staff_queues[$st_id][] = $row;
+    // วนลูปดึงคิวเฉพาะของหมอนวดแต่ละคนที่เช็กอินแล้ว
+    foreach ($summary_staffs as $st) {
+        $st_id = $st['staff_id'];
+        $stmt_sum->execute([
+            ':sum_date' => $summary_date,
+            ':staff_id' => $st_id
+        ]);
+        $staff_queues[$st_id] = $stmt_sum->fetchAll(PDO::FETCH_ASSOC);
     }
 }
 ?>
