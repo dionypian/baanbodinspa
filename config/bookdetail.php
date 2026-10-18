@@ -14,11 +14,12 @@ require_once 'db-connect.php';
 
 date_default_timezone_set('Asia/Bangkok');
 
-// 1. ดึงรายการ booking_group_id ทั้งหมดของลูกค้ารายนี้ (เรียงจากล่าสุดไปเก่าสุด)
-$sql_groups = "SELECT DISTINCT booking_group_id, booking_date, booking_time, status, created_at 
+// 1. ดึงรายการ booking_group_id แบบไม่ให้ซ้ำกัน โดยดึงวันที่และเวลาของกลุ่มนั้นๆ มาด้วย
+$sql_groups = "SELECT booking_group_id, MIN(booking_date) AS booking_date, MIN(booking_time) AS booking_time, MIN(created_at) AS created_at 
                FROM bookings 
                WHERE cus_id = :cus_id 
-               ORDER BY created_at DESC";
+               GROUP BY booking_group_id 
+               ORDER BY MAX(created_at) DESC";
 $stmt_g = $pdo->prepare($sql_groups);
 $stmt_g->execute([':cus_id' => $cus_id]);
 $booking_groups = $stmt_g->fetchAll(PDO::FETCH_ASSOC);
@@ -88,7 +89,7 @@ function getStatusBadge($status) {
                 <?php foreach ($booking_groups as $group): 
                     $group_id = $group['booking_group_id'];
 
-                    // ดึงรายละเอียดการจองย่อยในกลุ่มนี้
+                // ดึงรายละเอียดการจองย่อยในกลุ่มนี้
                     $sql_details = "
                         SELECT 
                             b.*, 
@@ -107,10 +108,42 @@ function getStatusBadge($status) {
                     $stmt_d->execute([':group_id' => $group_id]);
                     $items = $stmt_d->fetchAll(PDO::FETCH_ASSOC);
 
-                    // คำนวณราคารวมของกลุ่มการจองนี้
+                    // คำนวณราคารวม และตรวจสอบว่าทุกคนในกลุ่มนวดเสร็จ (completed) ครบทั้งหมดหรือยัง
                     $group_total_price = 0;
+                    $all_completed = true;
+                    $has_cancelled = false;
+                    // ตัวแปรนับจำนวน
+                    $completed_count = 0;
+                    $total_count = count($items);
+                    // ตัวแปรสำหรับนับจำนวนคนยกเลิก และคนทั้งหมดที่ยังไม่ยกเลิก
+                    $cancelled_count = 0;
+                    $active_total_count = 0; // จำนวนคนที่ไม่ถูกยกเลิก (เอาไว้เทียบสัดส่วนจ่ายเงิน)
+                    $all_cancelled = true;   // เช็กว่ายกเลิกหมดทุกคนเลยไหม
                     foreach ($items as $it) {
-                        $group_total_price += ($it['service_price'] ?? 0);
+                        // ถ้ารายการนี้ไม่ถูกยกเลิก ถึงจะนำมารวมราคา
+                        if ($it['status'] !== 'cancelled') {
+                            $group_total_price += ($it['service_price'] ?? 0);
+                            $active_total_count++;
+                            $all_cancelled = false;
+                        } else {
+                            $cancelled_count++;
+                        }
+                        
+                        // เช็กสถานะ completed เฉพาะคนที่ไม่ได้ยกเลิก
+                        if ($it['status'] === 'completed') {
+                            $completed_count++;
+                        } elseif ($it['status'] !== 'cancelled') {
+                            $all_completed = false;
+                        }
+                    }
+
+                    // 🟢 กำหนดสถานะรวมของกลุ่ม (Group Status) 
+                    if ($all_cancelled) {
+                        $display_status = 'cancelled'; // ถ้าทุกคนในกลุ่มยกเลิกหมด
+                    } elseif ($all_completed && $active_total_count > 0) {
+                        $display_status = 'completed'; // ถ้าคนที่เหลืออยู่ นวดเสร็จและจ่ายเงินครบทุกคนแล้ว
+                    } else {
+                        $display_status = 'confirmed'; // สถานะปกติ (มีบางคนกำลังนวด หรือรอดำเนินการ)
                     }
 
                     // จัดกลุ่มบริการตามลูกค้าแต่ละคน
@@ -127,11 +160,20 @@ function getStatusBadge($status) {
                             <div>
                                 <div class="text-xs text-gray-500">หมายเลขอ้างอิง: <span class="font-mono font-bold text-[#382214]"><?= htmlspecialchars($group_id) ?></span></div>
                                 <div class="text-base font-bold text-[#382214] mt-0.5">
-                                    📅 วันที่ <?= date('d/m/Y', strtotime($group['booking_date'])) ?> เวลา <?= date('H:i', strtotime($group['booking_time'])) ?> น.
+                                    📅 วันที่ <?= date('d/m/Y', strtotime($items[0]['booking_date'])) ?> เวลา <?= date('H:i', strtotime($items[0]['booking_time'])) ?> น.
                                 </div>
                             </div>
-                            <div>
-                                <?= getStatusBadge($group['status']) ?>
+                            
+                            <div class="flex items-center gap-2">
+                                <!-- 🟢 แสดงป้ายสัดส่วน (เทียบกับจำนวนคนที่ไม่ถูกยกเลิก) -->
+                                <?php if ($display_status !== 'completed' && $display_status !== 'cancelled' && $completed_count > 0): ?>
+                                    <span class="text-xs font-semibold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-300">
+                                        ชำระแล้ว <?= $completed_count ?>/<?= $active_total_count ?> คน
+                                    </span>
+                                <?php endif; ?>
+
+                                <!-- แสดง Badge สถานะหลักของกลุ่ม -->
+                                <?= getStatusBadge($display_status) ?>
                             </div>
                         </div>
 
@@ -143,22 +185,26 @@ function getStatusBadge($status) {
                             foreach ($items as $index => $item): 
                             ?>
                                 <div class="p-3 bg-[#FAF6F0]/60 rounded-2xl border border-gray-100 flex flex-col sm:flex-row justify-between sm:items-center gap-2 text-sm">
-                                    <div class="space-y-1">
-                                        <div class="font-bold text-[#382214]">
-                                             <?= htmlspecialchars($item['service_name'] ?? 'ไม่ระบุบริการ') ?>
-                                        </div>
-                                        <div class="text-xs text-gray-600">
-                                             เวลาบริการ: <?= $item['service_duration'] ?? 0 ?> นาที
-                                        </div>
-                                        <div class="text-xs text-gray-600">
-                                            พนักงาน: 
-                                            <?php if (!empty($item['staff_nickname'] || !empty($item['staff_name']))): ?>
-                                                <span class="font-semibold text-[#382214]">หมอ <?= htmlspecialchars($item['staff_nickname'] ?? $item['staff_name']) ?></span>
-                                            <?php else: ?>
-                                                <span class="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-medium">⏳ ไม่ระบุ (ทางร้านจะจัดสรรให้)</span>
-                                            <?php endif; ?>
-                                        </div>
+                                <div class="space-y-1">
+                                    <div class="font-bold text-[#382214] flex flex-wrap items-center gap-2">
+                                        <span><?= htmlspecialchars($item['service_name'] ?? 'ไม่ระบุบริการ') ?></span>
+                                        
+                                        <!-- 🟢 เพิ่มตรงนี้: แสดงป้ายสถานะแยกตามแต่ละรายการย่อย -->
+                                        <?= getStatusBadge($item['status']) ?>
                                     </div>
+                                    
+                                    <div class="text-xs text-gray-600">
+                                         เวลาบริการ: <?= $item['service_duration'] ?? 0 ?> นาที
+                                    </div>
+                                    <div class="text-xs text-gray-600">
+                                        พนักงาน: 
+                                        <?php if (!empty($item['staff_nickname'] || !empty($item['staff_name']))): ?>
+                                            <span class="font-semibold text-[#382214]">หมอ <?= htmlspecialchars($item['staff_nickname'] ?? $item['staff_name']) ?></span>
+                                        <?php else: ?>
+                                            <span class="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-medium">⏳ ไม่ระบุ (ทางร้านจะจัดสรรให้)</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
                                     
                                     <div class="text-right sm:text-right font-bold text-[#5A3A29]">
                                         <?= number_format($item['service_price'] ?? 0) ?> บาท
