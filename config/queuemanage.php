@@ -113,31 +113,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     </div>
     <form id="dateFilterForm" method="GET" action="dashboard.php" class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
         <input type="hidden" name="tab" value="queue">
-
-        <div class="flex items-center gap-3">
-            <span class="text-sm font-bold text-[#382214] flex items-center gap-1.5">
-                เลือกวันที่ดูคิว:
-            </span>
-            <form id="dateFilterForm" method="GET" action="dashboard.php" class="flex items-center gap-2">
-                <input type="hidden" name="tab" value="queue">
-                <input
-                    type="text"
-                    id="queue_date_picker"
-                    name="filter_date"
-                    value="<?= htmlspecialchars($selected_date) ?>"
-                    class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-sm font-semibold text-[#382214] bg-amber-50/50 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer text-center w-44"
-                >
-                <input
-                    type="text"
-                    name="search_query"
-                    value="<?= htmlspecialchars($_GET['search_query'] ?? '') ?>"
-                    class="border border-gray-300 rounded-xl pl-9 pr-3 py-2 text-sm text-gray-700 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                >
-                <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-sm px-2.5 py-1 rounded-lg transition-colors">
-                    ค้นหา
-                </button>
-            </form>
-        </div>
+        <span class="text-sm font-bold text-[#382214] flex items-center gap-1.5">
+            เลือกวันที่ดูคิว:
+        </span>
+        <input
+            type="text"
+            id="queue_date_picker"
+            name="filter_date"
+            value="<?= htmlspecialchars($selected_date) ?>"
+            class="bg-white border border-gray-300 rounded-xl px-3 py-2 text-sm font-semibold text-[#382214] bg-amber-50/50 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer text-center w-44"
+        >
+        <input
+            type="text"
+            name="search_query"
+            value="<?= htmlspecialchars($_GET['search_query'] ?? '') ?>"
+            class="border border-gray-300 rounded-xl pl-9 pr-3 py-2 text-sm text-gray-700 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+        >
+        <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-sm px-2.5 py-1 rounded-lg transition-colors">
+            ค้นหา
+        </button>
     </form>
 
     <div class="bg-white rounded-2xl shadow-sm border border-[#E8E2D5] overflow-hidden">

@@ -13,7 +13,6 @@
                     id="summary_date_picker" 
                     name="summary_date" 
                     value="<?= htmlspecialchars($summary_date ?? date('Y-m-d')) ?>" 
-                    onchange="this.form.submit()"
                     class="border border-gray-400 rounded-lg px-3 py-1.5 text-sm font-semibold text-[#382214] text-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500">
             </form>
 
@@ -234,7 +233,7 @@
                     ?>
                     <tr>
                         <td colspan="<?= 3 + $max_rounds + 5 ?>" class="p-6 text-center text-gray-500 font-bold">
-                            ยังไม่มีพนักงานเช็กอินเข้างานในวันที่ <?= date('d/m/Y', strtotime($summary_date ?? date('Y-m-d'))) ?>
+                            ยังไม่มีคิวจองหรือพนักงานเช็กอินในวันที่ <?= date('d/m/Y', strtotime($summary_date ?? date('Y-m-d'))) ?>
                         </td>
                     </tr>
                     <?php endif; ?>

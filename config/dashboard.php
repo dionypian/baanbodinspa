@@ -141,62 +141,72 @@ function getAvailableStaffs($pdo, $booking_date, $booking_time, $duration_minute
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// --- ดึงข้อมูลเฉพาะเมื่ออยู่ในแท็บ summary ---
-if ($active_tab === 'summary') {
-    $summary_date = $_GET['summary_date'] ?? date('Y-m-d');
+$summary_date = $_GET['summary_date'] ?? date('Y-m-d');
 
-    // 1. ดึงเฉพาะพนักงานที่เช็กอินแล้วในวันนั้นเท่านั้น
-    $sql_summary_staffs = "
-        SELECT s.*, c.checkin_time 
-        FROM checkin c
-        INNER JOIN staffs s ON c.staff_id = s.staff_id
-        WHERE DATE(c.checkin_time) = :sum_date
-        ORDER BY c.checkin_time ASC, s.staff_id ASC
-    ";
-    
-    $stmt_staffs = $pdo->prepare($sql_summary_staffs);
-    $stmt_staffs->execute([':sum_date' => $summary_date]);
-    $summary_staffs = $stmt_staffs->fetchAll(PDO::FETCH_ASSOC);
+// โหลดข้อมูลตารางคิวไว้เสมอ เพื่อให้สลับแท็บแล้วแสดงผลได้ทันที
+$sql_summary_staffs = "
+    SELECT s.*, c.checkin_time
+    FROM staffs s
+    LEFT JOIN (
+        SELECT staff_id, MIN(checkin_time) AS checkin_time
+        FROM checkin
+        WHERE DATE(checkin_time) = :checkin_date
+        GROUP BY staff_id
+    ) c ON c.staff_id = s.staff_id
+    WHERE c.staff_id IS NOT NULL
+        OR EXISTS (
+            SELECT 1
+            FROM bookings b
+            WHERE b.staff_id = s.staff_id
+                AND b.booking_date = :booking_date
+                AND b.status IN ('confirmed', 'completed', 'pending')
+        )
+    ORDER BY c.checkin_time IS NULL, c.checkin_time ASC, s.staff_id ASC
+";
 
-    // 2. ดึงรายการจองแยกตามพนักงาน และ GROUP BY เวลา เพื่อไม่ให้ชื่อบริการเบิ้ลซ้ำซ้อน
-    $staff_queues = [];
-    
-    $sql_summary_bookings = "
-        SELECT 
-            b.id as booking_id,
-            bi.item_id,
-            b.staff_id,
-            b.booking_date,
-            b.booking_time,
-            b.status,
-            s.name as service_name,
-            s.duration,
-            s.price,
-            s.commission as hand_fee,
-            COALESCE(p.payment_method, b.payment_method) as payment_method,
-            p.coupon_code
-        FROM bookings b
-        INNER JOIN booking_items bi ON b.id = bi.booking_id
-        INNER JOIN allservices s ON bi.service_id = s.id
-        LEFT JOIN payments p ON b.id = p.booking_id
-        WHERE b.booking_date = :sum_date 
+$stmt_staffs = $pdo->prepare($sql_summary_staffs);
+$stmt_staffs->execute([
+    ':checkin_date' => $summary_date,
+    ':booking_date' => $summary_date
+]);
+$summary_staffs = $stmt_staffs->fetchAll(PDO::FETCH_ASSOC);
+
+// ดึงรายการจองแยกตามพนักงาน และ GROUP BY เวลา เพื่อไม่ให้ชื่อบริการเบิ้ลซ้ำซ้อน
+$staff_queues = [];
+
+$sql_summary_bookings = "
+    SELECT
+        b.id as booking_id,
+        bi.item_id,
+        b.staff_id,
+        b.booking_date,
+        b.booking_time,
+        b.status,
+        s.name as service_name,
+        s.duration,
+        s.price,
+        s.commission as hand_fee,
+        COALESCE(p.payment_method, b.payment_method) as payment_method,
+        p.coupon_code
+    FROM bookings b
+    INNER JOIN booking_items bi ON b.id = bi.booking_id
+    INNER JOIN allservices s ON bi.service_id = s.id
+    LEFT JOIN payments p ON b.id = p.booking_id
+    WHERE b.booking_date = :sum_date
         AND b.staff_id = :staff_id
         AND b.status IN ('confirmed', 'completed', 'pending')
-        GROUP BY b.id, b.staff_id, b.booking_date, b.booking_time, b.status
-        ORDER BY b.booking_time ASC, bi.item_id ASC
-    ";
-    
-    $stmt_sum = $pdo->prepare($sql_summary_bookings);
+    GROUP BY b.id, b.staff_id, b.booking_date, b.booking_time, b.status
+    ORDER BY b.booking_time ASC, bi.item_id ASC
+";
 
-    // วนลูปดึงคิวเฉพาะของหมอนวดแต่ละคนที่เช็กอินแล้ว
-    foreach ($summary_staffs as $st) {
-        $st_id = $st['staff_id'];
-        $stmt_sum->execute([
-            ':sum_date' => $summary_date,
-            ':staff_id' => $st_id
-        ]);
-        $staff_queues[$st_id] = $stmt_sum->fetchAll(PDO::FETCH_ASSOC);
-    }
+$stmt_sum = $pdo->prepare($sql_summary_bookings);
+foreach ($summary_staffs as $st) {
+    $st_id = $st['staff_id'];
+    $stmt_sum->execute([
+        ':sum_date' => $summary_date,
+        ':staff_id' => $st_id
+    ]);
+    $staff_queues[$st_id] = $stmt_sum->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 
@@ -506,7 +516,10 @@ if ($active_tab === 'summary') {
                 altFormat: "j F Y",
                 plugins: typeof flatpickrBuddhistEra === 'function' ? [new flatpickrBuddhistEra()] : [],
                 onChange: function(selectedDates, dateStr) {
-                    document.getElementById('dateFilterForm').submit();
+                    const form = queueDatePicker.closest('form');
+                    if (form) {
+                        form.submit();
+                    }
                 }
             });
         }
