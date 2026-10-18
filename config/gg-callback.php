@@ -60,7 +60,7 @@ if (isset($_GET['code'])) {
         $_SESSION['user_email']   = $email;
 
         // 5. ส่งผู้ใช้กลับไปยังหน้าแรก (หรือหน้าจองคิว)
-        header('Location: http://localhost/baanbodinspa/config/booking.php');
+        header('Location: booking.php');
         exit;
     } else {
         echo "เกิดข้อผิดพลาดในการรับ Token จาก Google";

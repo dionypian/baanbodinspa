@@ -140,8 +140,19 @@ function getAvailableStaffs($pdo, $booking_date, $booking_time, $duration_minute
 if ($active_tab === 'summary') {
     $summary_date = $_GET['summary_date'] ?? date('Y-m-d');
 
-    // 1. ดึงรายชื่อหมอนวดทั้งหมด
-    $stmt_staffs = $pdo->query("SELECT * FROM staffs ORDER BY staff_id ASC");
+    // 🟢 ปรับ SQL ให้ดึงหมอนวดและ JOIN เวลา Check-in ของวันนั้น พร้อมเรียงลำดับตามเวลาเช็กอิน (ใครมาก่อนขึ้นก่อน)
+    $sql_summary_staffs = "
+        SELECT s.*, c.checkin_time 
+        FROM staffs s
+        LEFT JOIN checkin c ON s.staff_id = c.staff_id AND DATE(c.checkin_time) = :sum_date
+        ORDER BY 
+            CASE WHEN c.checkin_time IS NULL THEN 1 ELSE 0 END ASC, 
+            c.checkin_time ASC, 
+            s.staff_id ASC
+    ";
+    
+    $stmt_staffs = $pdo->prepare($sql_summary_staffs);
+    $stmt_staffs->execute([':sum_date' => $summary_date]);
     $summary_staffs = $stmt_staffs->fetchAll(PDO::FETCH_ASSOC);
 
     // 2. ดึงรายการจองของวันที่เลือก (รวมคิวที่มีหมอรับงาน)

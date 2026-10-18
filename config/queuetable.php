@@ -1,22 +1,41 @@
 <!-- TAB 1: ตารางคิวจองและสรุปรายรับประจำวัน -->
 <section id="section-summary" class="space-y-6 hidden">
     
-    <div class="flex items-center gap-3">
-        <label class="text-ml font-bold text-[#382214] whitespace-nowrap">ตารางการจองคิววันที่ :</label>
-        <form id="summary_date_form" method="GET" action="dashboard.php" class="flex items-center gap-1">
-            <input type="hidden" name="tab" value="summary">
-            <input type="text" 
-                id="summary_date_picker" 
-                name="summary_date" 
-                value="<?= htmlspecialchars($summary_date ?? date('Y-m-d')) ?>" 
-                onchange="this.form.submit()"
-                class="border border-gray-400 rounded-lg px-3 py-1.5 text-sm font-semibold text-[#382214] text-center w-36 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500">
-        </form>
+    <!-- ตารางการจองคิววันที่ :...                         export to excel -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        
+        <!-- ฝั่งซ้าย: ตารางการจองคิววันที่ + ฟอร์มเลือกวันที่ -->
+        <div class="flex items-center gap-3">
+            <label class="text-ml font-bold text-[#382214] whitespace-nowrap">ตารางการจองคิววันที่ :</label>
+            <form id="summary_date_form" method="GET" action="dashboard.php" class="flex items-center gap-1">
+                <input type="hidden" name="tab" value="summary">
+                <input type="text" 
+                    id="summary_date_picker" 
+                    name="summary_date" 
+                    value="<?= htmlspecialchars($summary_date ?? date('Y-m-d')) ?>" 
+                    onchange="this.form.submit()"
+                    class="border border-gray-400 rounded-lg px-3 py-1.5 text-sm font-semibold text-[#382214] text-center w-36 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500">
+            </form>
+        </div>
+
+        <!-- ฝั่งขวา: ปุ่ม Export to Excel -->
+        <div>
+            <a href="export_excel.php?summary_date=<?= htmlspecialchars($summary_date ?? date('Y-m-d')) ?>" 
+            class="inline-flex items-center gap-2 bg-[#047857] hover:bg-[#065f46] text-white px-4 py-2 rounded-xl text-sm font-medium shadow transition-all active:scale-95">
+                <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+                <span>Export to Excel</span>
+            </a>
+        </div>
+
     </div>
 
     <div class="text-center font-bold text-xl text-[#382214]">
         ตารางการจองคิววันที่ <?= date('d/m/Y', strtotime($summary_date ?? date('Y-m-d'))) ?>
     </div>
+
+
 
     <?php 
     $max_rounds = 0;
@@ -46,6 +65,7 @@
                 <tr class="bg-gray-50 border-b border-gray-400 text-[#382214]">
                     <th class="border border-gray-400 p-2.5 w-12">No</th>
                     <th class="border border-gray-400 p-2.5 w-28">ชื่อหมอ</th>
+                    <th class="border border-gray-400 p-2.5 w-28">เวลาเข้างาน</th>
                     
                     <!-- 🟢 แสดงหัวตารางรอบที่ 1 ถึงรอบสูงสุดจริง Dynamic -->
                     <?php for ($r = 1; $r <= $max_rounds; $r++): ?>
@@ -120,6 +140,19 @@
                         <td class="border border-gray-400 p-2 font-medium text-center"><?= $no++ ?></td>
                         <td class="border border-gray-400 p-2 font-bold text-gray-800">
                             <?= htmlspecialchars($st['nickname'] ?? $st['name']) ?>
+                        </td>
+                        <!-- แสดงเวลา Check-in -->
+                        <td class="border border-gray-400 p-2 font-bold text-gray-800">
+                            
+                            <?php if (!empty($st['checkin_time'])): ?>
+                                <div class="text-xs font-bold text-emerald-700 mt-0.5">
+                                    <?= date('H:i', strtotime($st['checkin_time'])) ?> น.
+                                </div>
+                            <?php else: ?>
+                                <div class="text-xs font-bold text-red-500 mt-0.5">
+                                    ยังไม่เช็กอิน
+                                </div>
+                            <?php endif; ?>
                         </td>
 
                         <!-- แสดงคิวรอบต่างๆ -->

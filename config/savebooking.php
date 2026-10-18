@@ -8,6 +8,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once 'db-connect.php';
+require_once 'auto_assign.php';
 
 $cus_id         = $_SESSION['cus_id'] ?? $_SESSION['user_id'] ?? null;
 $booking_date   = $_SESSION['booking']['booking_date'] ?? '';
@@ -114,6 +115,9 @@ try {
     }
 
     $pdo->commit();
+
+    // รันการจัดคิวหมอนวดให้อัตโนมัติสำหรับวันที่จองนี้
+    autoAssignStaffToBookings($pdo, $booking_date);
     
     unset($_SESSION['booking']);
 
@@ -121,6 +125,8 @@ try {
     exit;
 
 } catch (PDOException $e) {
-    $pdo->rollBack();
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     die("เกิดข้อผิดพลาดจาก Database: " . $e->getMessage());
 }
