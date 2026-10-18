@@ -61,17 +61,20 @@ if ($search_query !== '') {
 $sql_bookings = "SELECT b.*, 
                         c.name as customer_name, c.phone as customer_phone,
                         s.nickname as staff_nickname, s.name as staff_name,
-                        srv.name as default_service_name, srv.duration as default_duration, srv.price as default_price
+                        srv.name as default_service_name, srv.duration as default_duration, srv.price as default_price,
+                        p.payment_method as payment_method,
+                        p.slip_image as slip_image
                  FROM bookings b
                  LEFT JOIN customers c ON b.cus_id = c.cus_id
                  LEFT JOIN staffs s ON b.staff_id = s.staff_id
-                 LEFT JOIN allservices srv ON b.service_id = srv.id";
+                 LEFT JOIN allservices srv ON b.service_id = srv.id
+                 LEFT JOIN payments p ON b.id = p.booking_id";
 
 if (!empty($where_clauses)) {
     $sql_bookings .= " WHERE " . implode(" AND ", $where_clauses);
 }
 
-$sql_bookings .= " ORDER BY b.booking_time ASC";
+$sql_bookings .= " ORDER BY b.created_at DESC";
 
 // 🟢 ดึงข้อมูลรายการคิวจองที่กรองแล้วลงตัวแปร $bookings
 $stmt_b = $pdo->prepare($sql_bookings);

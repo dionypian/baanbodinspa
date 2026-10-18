@@ -97,6 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $msg_type = "error";
     }
 }
+
 ?>
 
 <!-- TAB 2: ส่วนจัดการคิวจอง (Default Open) -->
@@ -132,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     value="<?= htmlspecialchars($_GET['search_query'] ?? '') ?>"
                     class="border border-gray-300 rounded-xl pl-9 pr-3 py-2 text-sm text-gray-700 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 >
-                <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs px-2.5 py-1 rounded-lg transition-colors">
+                <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-sm px-2.5 py-1 rounded-lg transition-colors">
                     ค้นหา
                 </button>
             </form>
@@ -162,22 +163,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         $total_price = 0.0;
 
                         if (!empty($items)) {
-                            // มีรายการใน booking_items
                             $total_price = (float) array_sum(array_column($items, 'price'));
                         } elseif (!empty($b['default_price'])) {
-                            // ไม่มีใน booking_items ให้ใช้ราคาจากบริการตั้งต้น
                             $total_price = (float) $b['default_price'];
                         } elseif (!empty($b['price'])) {
-                            // Fallback กรณีใช้คอลัมน์ price ตรงๆ ในตาราง bookings
                             $total_price = (float) $b['price'];
                         }
 
-                        // คำนวณเวลารวม (นาที) สำหรับเช็คหมอว่าง
                         $total_duration = !empty($items)
                             ? array_sum(array_column($items, 'duration'))
                             : ($b['default_duration'] ?? 60);
 
-                        // ดึงรายการหมอว่างสำหรับคิวนี้
                         $available_staffs_for_this_booking = getAvailableStaffs(
                             $pdo,
                             $b['booking_date'],
@@ -200,24 +196,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <!-- คอลัมน์บริการที่เลือก -->
                             <td class="p-3.5">
                                 <?php if (!empty($items)): ?>
-                                    <ul class="list-disc list-inside text-xs space-y-0.5">
+                                    <ul class="list-disc list-inside text-base space-y-0.5">
                                         <?php foreach ($items as $item): ?>
                                             <li><?= htmlspecialchars($item['service_name']) ?> (<?= $item['duration'] ?> นาที)</li>
                                         <?php endforeach; ?>
                                     </ul>
                                 <?php elseif (!empty($b['default_service_name'])): ?>
-                                    <div class="text-sm font-medium text-gray-800">
+                                    <div class="text-base font-medium text-gray-800">
                                         <?= htmlspecialchars($b['default_service_name']) ?> (<?= $b['default_duration'] ?> นาที)
                                     </div>
                                 <?php else: ?>
-                                    <span class="text-xs text-gray-400">- ไม่ระบุบริการ -</span>
+                                    <span class="text-base text-gray-400">ไม่ระบุบริการ</span>
+                                <?php endif; ?>
+                                
+                                <!-- แสดงช่องทางชำระเงินเล็กๆ เมื่อสำเร็จแล้ว -->
+                                <?php if ($b['status'] === 'completed' && !empty($b['payment_method'])): ?>
+                                    <div class="mt-1 text-[14px] text-gray-500">
+                                        ชำระโดย: <span class="font-semibold uppercase text-amber-800"><?= $b['payment_method'] ?></span>
+                                    </div>
                                 <?php endif; ?>
                             </td>
 
                             <!-- คอลัมน์หมอนวด -->
-                            <td class="p-3.5 text-xs font-medium">
+                            <td class="p-3.5 text-lg font-bold">
                                 <?php if (!empty($b['staff_nickname'])): ?>
-                                    <span class="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200">
+                                    <span class="px-2.5 py-1">
                                         หมอ<?= htmlspecialchars($b['staff_nickname']) ?>
                                     </span>
                                 <?php else: ?>
@@ -233,34 +236,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                             <td class="p-3.5">
                                 <?php if ($b['status'] === 'confirmed'): ?>
-                                    <span class="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold">Confirmed</span>
+                                    <span class="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-base font-semibold">Confirmed</span>
                                 <?php elseif ($b['status'] === 'completed'): ?>
-                                    <span class="px-2.5 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">Completed</span>
+                                    <span class="px-2.5 py-1 bg-green-100 text-green-800 rounded-full text-base font-semibold">Completed</span>
                                 <?php elseif ($b['status'] === 'cancelled'): ?>
-                                    <span class="px-2.5 py-1 bg-red-100 text-red-800 rounded-full text-xs font-semibold">Cancelled</span>
+                                    <span class="px-2.5 py-1 bg-red-100 text-red-800 rounded-full text-base font-semibold">Cancelled</span>
                                 <?php else: ?>
-                                    <span class="px-2.5 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-semibold"><?= ucfirst($b['status']) ?></span>
+                                    <span class="px-2.5 py-1 bg-gray-100 text-gray-800 rounded-full text-base font-semibold"><?= ucfirst($b['status']) ?></span>
                                 <?php endif; ?>
                             </td>
 
                             <td class="p-3.5 text-center space-x-1">
-                                <!-- ปุ่มแก้ไขรายการบริการและเลือกพนักงาน -->
-                                <button
-                                    type="button"
-                                    onclick='openEditBookingModal(
+                                <!-- เงื่อนไข 1: แสดงปุ่มแก้ไขเฉพาะกรณีที่สถานะยังไม่สำเร็จ (completed) -->
+                                <?php if ($b['status'] !== 'completed' && $b['status'] !== 'cancelled'): ?>
+                                    <button
+                                        type="button"
+                                        onclick='openEditBookingModal(
                                                     <?= htmlspecialchars(json_encode($b), ENT_QUOTES, "UTF-8") ?>, 
                                                     <?= htmlspecialchars(json_encode($items), ENT_QUOTES, "UTF-8") ?>,
                                                     <?= htmlspecialchars(json_encode($available_staffs_for_this_booking), ENT_QUOTES, "UTF-8") ?>
                                                 )'
-                                    class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-ml font-medium transition-colors"
-                                >
-                                    แก้ไข
-                                </button>
+                                        class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-ml font-medium transition-colors"
+                                    >
+                                        แก้ไข
+                                    </button>
+                                <?php endif; ?>
 
-                                <?php if ($b['status'] === 'confirmed'): ?>
+                                <!-- เงื่อนไข 2: กรณีชำระเงินโอนเรียบร้อยแล้ว (completed + transfer) ให้แสดงปุ่มอัปโหลดสลิปแทน -->
+                                <?php if ($b['status'] === 'completed' && ($b['payment_method'] ?? '') === 'transfer'): ?>
                                     <button
                                         type="button"
-                                        onclick="openCompleteModal(<?= $b_id ?>, <?= $total_price ?>)"
+                                        onclick="openUploadSlipModal(<?= $b_id ?>, '<?= htmlspecialchars($b['slip_image'] ?? '') ?>')"
+                                        class="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-ml font-medium transition-colors flex items-center gap-1 inline-flex"
+                                    >
+                                        <span><?= !empty($b['slip_image']) ? 'ดู/เปลี่ยนสลิป' : 'อัปโหลดสลิป' ?></span>
+                                    </button>
+                                <?php endif; ?>
+
+                                <?php if ($b['status'] === 'confirmed'): 
+                                    $service_names_str = !empty($items) 
+                                        ? implode(', ', array_column($items, 'service_name')) 
+                                        : ($b['default_service_name'] ?? 'ไม่ระบุบริการ');
+                                ?>
+                                    <button
+                                        type="button"
+                                        onclick="openCompleteModal(<?= $b_id ?>, <?= $total_price ?>, '<?= htmlspecialchars($service_names_str, ENT_QUOTES, 'UTF-8') ?>')"
                                         class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-ml font-medium transition-colors"
                                     >
                                         ชำระเงิน
@@ -333,25 +353,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <h3 class="text-lg font-bold text-[#382214] mb-1">ช่องทางการชำระเงิน</h3>
             <p class="text-sm text-gray-500 mb-4">การจองหมายเลข #<span id="complete_booking_id_text"></span></p>
 
-            <form action="admin-completebook.php" method="POST" class="space-y-4">
+            <form action="admin-completebook.php" method="POST" enctype="multipart/form-data" class="space-y-4">
                 <input type="hidden" id="complete_booking_id" name="booking_id">
 
-                <div class="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                <div class="bg-amber-50 p-3 rounded-xl">
                     <div class="text-base text-gray-600">ยอดชำระทั้งสิ้น</div>
                     <div class="text-3xl font-bold text-[#047857]"><span id="complete_total_price">0</span> บาท</div>
                 </div>
 
                 <div class="text-left">
                     <label class="block text-sm font-semibold mb-1">ช่องทางชำระเงิน:</label>
-                    <select name="payment_method" id="payment_method_select" onchange="toggleCouponInput()" required class="w-full border p-2.5 rounded-xl text-sm bg-white">
+                    <select name="payment_method" id="payment_method_select" onchange="handlePaymentMethodChange()" required class="w-full border p-2.5 rounded-xl text-sm bg-white">
                         <option value="cash">เงินสด</option>
-                        <option value="transfer">โอนเงิน</option>
+                        <option value="transfer">โอนเงิน (PromptPay QR)</option>
                         <option value="credit">เครดิต</option>
                         <option value="coupon">คูปอง</option>
                     </select>
                 </div>
 
-                <div id="coupon_code_wrapper" class="hidden">
+                <!-- ส่วนแสดง QR Code สำหรับสแกนจ่าย -->
+                <div id="qr_code_wrapper" class="hidden my-4 p-4 bg-gray-50 rounded-2xl border border-gray-200 text-center space-y-3">
+                    <p class="text-base font-bold text-gray-600">สแกน QR Code เพื่อชำระเงิน</p>
+                    <div class="flex justify-center">
+                        <img id="promptpay_qr_img" src="" alt="PromptPay QR Code" class="w-48 h-48 rounded-lg shadow-md bg-white p-2 border border-gray-100">
+                    </div>
+                    <p class="hidden">ยอดเงิน: <span id="qr_amount_text">0</span> บาท</p>
+                    <p class="text-sm text-amber-700 font-semibold">บริการ: <span id="qr_service_text" class="text-gray-800 font-normal">-</span></p>
+                    
+                    <!-- เพิ่มฟิลด์อัปโหลดสลิปย่อยในหน้ายืนยันการชำระเงิน -->
+                    <div class="text-left pt-2 border-t border-gray-200">
+                        <label class="block text-sm font-bold text-gray-700 mb-1">แนบสลิปการโอน :</label>
+                        <input type="file" name="payment_slip" accept="image/*" class="w-full text-xs text-gray-500 border border-gray-300 rounded-lg p-1.5 bg-white">
+                    </div>
+                </div>
+
+                <div id="coupon_code_wrapper" class="hidden text-left">
                     <label class="block text-sm font-bold text-gray-700 mb-1">รหัสคูปอง (Coupon Code): <span class="text-red-500">*</span></label>
                     <input
                         type="text"
@@ -364,6 +400,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <div class="flex gap-2 pt-2">
                     <button type="button" onclick="closeModal('completeModal')" class="w-1/2 py-2.5 bg-gray-200 text-gray-700 rounded-xl text-sm font-medium">ยกเลิก</button>
                     <button type="submit" class="w-1/2 py-2.5 bg-[#047857] hover:bg-[#065f46] text-white rounded-xl text-sm font-bold shadow-md">ยืนยันรับชำระ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2.1 MODAL UPLOAD SLIP (สำหรับอัปโหลดสลิปย้อนหลัง) -->
+    <div id="uploadSlipModal" class="modal-backdrop">
+        <div class="modal-content bg-white p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl">
+            <h3 class="text-xl font-bold text-[#382214] mb-1">สลิปการชำระเงิน</h3>
+            <p class="text-base text-gray-500 mb-4">การจองหมายเลข #<span id="upload_slip_booking_id_text"></span></p>
+
+            <form action="admin-uploadslip.php" method="POST" enctype="multipart/form-data" class="space-y-4">
+                <input type="hidden" id="upload_slip_booking_id" name="booking_id">
+
+                <!-- ตัวอย่างรูปภาพเดิม (ถ้ามี) -->
+                <div id="current_slip_preview_wrapper" class="hidden text-center">
+                    <p class="text-sm font-semibold text-gray-500 mb-1">สลิปปัจจุบัน:</p>
+                    <img id="current_slip_img" src="" alt="Slip Preview" class="w-68 max-h-68 object-contain mx-auto rounded-lg border border-gray-200 p-1 shadow-sm mb-3">
+                </div>
+
+                <div class="text-left">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">เลือกไฟล์รูปภาพสลิป:</label>
+                    <input type="file" name="payment_slip" accept="image/*" required class="w-full text-sm text-gray-500 border border-gray-300 rounded-xl p-2 bg-amber-50/30">
+                </div>
+
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="closeModal('uploadSlipModal')" class="w-1/2 py-2.5 bg-gray-200 text-gray-700 rounded-xl text-sm font-medium">ปิด</button>
+                    <button type="submit" class="w-1/2 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold shadow-md">บันทึกสลิป</button>
                 </div>
             </form>
         </div>
@@ -434,7 +498,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     </div>
                 </div>
 
-                <!-- 2. เลือกวัน เวลา และจำนวนผู้ใช้บริการ (เหมือนฟอร์มลูกค้า) -->
+                <!-- 2. เลือกวัน เวลา และจำนวนผู้ใช้บริการ -->
                 <div class="bg-white p-4 rounded-xl border border-gray-200 space-y-3">
                     <h4 class="font-bold text-sm text-[#382214]">📅 วันที่และเวลาจอง</h4>
                     <div class="grid grid-cols-3 gap-3">
@@ -466,7 +530,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     </div>
                 </div>
 
-                <!-- 3. เลือกบริการและพนักงาน (เหมือนฟอร์มลูกค้า) -->
+                <!-- 3. เลือกบริการและพนักงาน -->
                 <div class="bg-white p-4 rounded-xl border border-gray-200 space-y-3">
                     <h4 class="font-bold text-sm text-[#382214]">💆‍♂️ รายการบริการและพนักงาน</h4>
                         
@@ -570,20 +634,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         openModal('editBookingModal');
     }
+    
+    const PromptPay_ID = "0966343365";
 
-    function openCompleteModal(bookingId, totalPrice) {
-        const idInput = document.getElementById('complete_booking_id');
-        const textEl  = document.getElementById('complete_booking_id_text');
-        const priceEl = document.getElementById('complete_total_price');
-        const methodSelect = document.getElementById('payment_method_select');
-
-        if (idInput) idInput.value = bookingId;
-        if (textEl)  textEl.innerText = bookingId;
-        if (priceEl) priceEl.innerText = Number(totalPrice || 0).toLocaleString();
-        if (methodSelect) methodSelect.value = 'cash';
+    function openCompleteModal(bookingId, totalPrice, serviceNames) {
+        document.getElementById('complete_booking_id').value = bookingId;
+        document.getElementById('complete_booking_id_text').innerText = bookingId;
+        document.getElementById('complete_total_price').innerText = Number(totalPrice).toLocaleString();
         
-        toggleCouponInput();
+        const serviceSpan = document.getElementById('qr_service_text');
+        if (serviceSpan) {
+            serviceSpan.innerText = serviceNames || '-';
+        }
+
+        // บันทึกราคาลงใน dataset เพื่อนำไปใช้เจน QR Code
+        const modal = document.getElementById('completeModal');
+        modal.dataset.totalPrice = totalPrice;
+
+        // รีเซ็ตการเลือกช่องทางชำระเงินเป็น cash
+        const select = document.getElementById('payment_method_select');
+        select.value = 'cash';
+        handlePaymentMethodChange();
+
         openModal('completeModal');
+    }
+
+    function handlePaymentMethodChange() {
+        const select = document.getElementById('payment_method_select');
+        const qrWrapper = document.getElementById('qr_code_wrapper');
+        const couponWrapper = document.getElementById('coupon_code_wrapper');
+        const modal = document.getElementById('completeModal');
+        
+        const totalPrice = modal.dataset.totalPrice || 0;
+
+        if (select.value === 'coupon') {
+            couponWrapper.classList.remove('hidden');
+            document.getElementById('coupon_code_input').setAttribute('required', 'required');
+        } else {
+            couponWrapper.classList.add('hidden');
+            document.getElementById('coupon_code_input').removeAttribute('required');
+        }
+
+        if (select.value === 'transfer') {
+            qrWrapper.classList.remove('hidden');
+            document.getElementById('qr_amount_text').innerText = Number(totalPrice).toLocaleString();
+            
+            // ใช้ API เจน QR Code แบบ Dynamic
+            const qrUrl = `https://promptpay.io/${PromptPay_ID}/${totalPrice}.png`;
+            document.getElementById('promptpay_qr_img').src = qrUrl;
+        } else {
+            qrWrapper.classList.add('hidden');
+            document.getElementById('promptpay_qr_img').src = '';
+        }
+    }
+
+    function openUploadSlipModal(bookingId, slipImage) {
+        document.getElementById('upload_slip_booking_id').value = bookingId;
+        document.getElementById('upload_slip_booking_id_text').innerText = bookingId;
+
+        const previewWrapper = document.getElementById('current_slip_preview_wrapper');
+        const slipImg = document.getElementById('current_slip_img');
+
+        if (slipImage && slipImage !== '') {
+            slipImg.src = 'uploads/slips/' + slipImage;
+            previewWrapper.classList.remove('hidden');
+        } else {
+            previewWrapper.classList.add('hidden');
+            slipImg.src = '';
+        }
+
+        openModal('uploadSlipModal');
     }
 
     function openCancelModal(booking) {
