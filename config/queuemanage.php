@@ -1,4 +1,6 @@
 <?php
+require_once 'auto_assign.php';
+
 // --- ACTION 2: แอดมินสร้างคิวจองเอง (Walk-in / โทรจอง) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'admin_create_booking') {
     $cus_name       = trim($_POST['cus_name'] ?? '');
@@ -24,6 +26,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
             if ($end_timestamp > $closing_timestamp) {
                 throw new Exception("เวลาสิ้นสุดบริการเกินเวลาปิดร้าน (23:00 น.) กรุณาเลือกเวลาใหม่");
+            }
+
+            $is_same_day = $booking_date === date('Y-m-d');
+            if ($is_same_day) {
+                $planned_staff_ids = planSameDayStaffAssignments($pdo, $booking_date, $booking_time, [[
+                    'staff_id' => $staff_id,
+                    'service_ids' => [(int)$service_id]
+                ]]);
+                $staff_id = $planned_staff_ids[0];
             }
 
             // 2. ค้นหา/สร้างข้อมูลลูกค้าด้วยเบอร์โทรศัพท์

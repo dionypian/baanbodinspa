@@ -37,12 +37,20 @@ if (!empty($cus_phone) && $user_id > 0) {
 try {
     $pdo->beginTransaction();
 
+    $is_same_day = $booking_date === date('Y-m-d');
+    $planned_staff_ids = $is_same_day
+        ? planSameDayStaffAssignments($pdo, $booking_date, $booking_time, $items)
+        : [];
+
     // 1. ตรวจสอบว่าทุกคนได้เลือกพนักงานครบทั้งหมดหรือไม่
-    $all_staff_selected = true;
-    foreach ($items as $item) {
-        if (empty($item['staff_id'])) {
-            $all_staff_selected = false;
-            break;
+    $all_staff_selected = $is_same_day;
+    if (!$is_same_day) {
+        $all_staff_selected = true;
+        foreach ($items as $item) {
+            if (empty($item['staff_id'])) {
+                $all_staff_selected = false;
+                break;
+            }
         }
     }
 
@@ -90,7 +98,9 @@ try {
 
     // 2. วนลูปบันทึกตามรายบุคคล และคำนวณเวลาแบบบวกสะสมต่อกัน
     foreach ($items as $person_idx => $item) {
-        $staff_id    = !empty($item['staff_id']) ? $item['staff_id'] : null;
+        $staff_id    = $is_same_day
+            ? ($planned_staff_ids[$person_idx] ?? null)
+            : (!empty($item['staff_id']) ? $item['staff_id'] : null);
         $service_ids = array_filter($item['service_ids'] ?? []);
 
         if (empty($service_ids)) continue;
@@ -206,8 +216,9 @@ try {
 
     $pdo->commit();
 
-    // รันการจัดคิวหมอนวดให้อัตโนมัติสำหรับวันที่จองนี้
-    autoAssignStaffToBookings($pdo, $booking_date);
+    if ($is_same_day) {
+        autoAssignStaffToBookings($pdo, $booking_date);
+    }
     
     unset($_SESSION['booking']);
 
@@ -219,7 +230,16 @@ try {
         $pdo->rollBack();
     }
     $_SESSION['booking_error'] = $e->getMessage();
+    $_SESSION['booking_error_type'] = 'coupon';
     header("Location: booking.php?step=3");
+    exit;
+} catch (BookingAvailabilityException $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    $_SESSION['booking_error'] = $e->getMessage();
+    $_SESSION['booking_error_type'] = 'availability';
+    header("Location: booking.php?step=2");
     exit;
 } catch (Exception $e) {
     if ($pdo->inTransaction()) {

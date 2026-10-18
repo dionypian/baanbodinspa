@@ -8,6 +8,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
 }
 
 require_once 'db-connect.php';
+require_once 'auto_assign.php';
 
 // ดึงข้อมูลทักษะบริการของพนักงานทั้งหมด (staff_id => [service_ids])
 $stmt_staff_skills = $pdo->query("SELECT staff_id, service_id FROM staff_services");
@@ -654,6 +655,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 try {
                     $pdo->beginTransaction();
+                    $is_same_day = $booking_date === date('Y-m-d');
+                    $planned_staff_ids = $is_same_day
+                        ? planSameDayStaffAssignments($pdo, $booking_date, $booking_time, $items)
+                        : [];
 
                     // 1. หาหรือสร้าง cus_id จากเบอร์โทรศัพท์ลูกค้า (ถ้าตารางลูกค้าชื่อ customers)
                     $cus_id = null;
@@ -676,8 +681,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     // 2. บันทึกคิวจองลงตาราง bookings และ booking_items
                     foreach ($items as $index => $item) {
-                        $staff_id    = !empty($item['staff_id']) ? $item['staff_id'] : null;
+                        $staff_id    = $is_same_day
+                            ? ($planned_staff_ids[$index] ?? null)
+                            : (!empty($item['staff_id']) ? (int)$item['staff_id'] : null);
                         $service_ids = $item['service_ids'] ?? [];
+                        $status = $staff_id ? 'confirmed' : 'pending';
 
                         // 🟢 ดึง service_id แรกสุดเพื่อส่งเข้าตาราง bookings ให้ผ่าน Foreign Key Constraint
                         $main_service_id = !empty($service_ids) ? (int)$service_ids[0] : null;
@@ -685,14 +693,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // INSERT ลงตาราง bookings พร้อมระบุ service_id
                         $stmt_b = $pdo->prepare("
                             INSERT INTO bookings (cus_id, staff_id, service_id, booking_date, booking_time, status, created_at)
-                            VALUES (:cus_id, :staff_id, :service_id, :b_date, :b_time, 'confirmed', NOW())
+                            VALUES (:cus_id, :staff_id, :service_id, :b_date, :b_time, :status, NOW())
                         ");
                         $stmt_b->execute([
                             ':cus_id'     => $cus_id,
                             ':staff_id'   => $staff_id,
                             ':service_id' => $main_service_id, // 🟢 ใส่เพื่อปลดล็อก Foreign Key
                             ':b_date'     => $booking_date,
-                            ':b_time'     => $booking_time
+                            ':b_time'     => $booking_time,
+                            ':status'     => $status
                         ]);
 
                         $new_booking_id = $pdo->lastInsertId();

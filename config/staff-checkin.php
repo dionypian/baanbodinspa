@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'db-connect.php';
+require_once 'auto_assign.php';
 
 date_default_timezone_set('Asia/Bangkok');
 $today = date('Y-m-d');
@@ -71,6 +72,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             $_SESSION['flash_msg'] = "เข้างานเรียบร้อยแล้วค่ะ! ขอให้เป็นวันที่ดีนะคะ ✨";
                             $_SESSION['flash_type'] = "success";
+
+                            try {
+                                autoAssignStaffToBookings($pdo, $today);
+                            } catch (Exception $assignment_error) {
+                                error_log('Auto-assignment after staff check-in failed: ' . $assignment_error->getMessage());
+                                $_SESSION['flash_msg'] = "บันทึกเข้างานสำเร็จ แต่จัดคิวอัตโนมัติไม่สำเร็จ กรุณาแจ้งผู้ดูแลระบบ";
+                                $_SESSION['flash_type'] = "error";
+                            }
                         } catch (Exception $e) {
                             $_SESSION['flash_msg'] = "เกิดข้อผิดพลาดในการบันทึกข้อมูล: " . $e->getMessage();
                             $_SESSION['flash_type'] = "error";

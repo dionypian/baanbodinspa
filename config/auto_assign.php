@@ -135,3 +135,122 @@ function isStaffAvailable($pdo, $staff_id, $booking_date, $booking_time, $durati
 
     return $stmt->fetchColumn() == 0; // ถ้ารับคิวไม่ได้ ( overlap ) จะคืนค่า false
 }
+
+function planSameDayStaffAssignments($pdo, $booking_date, $booking_time, array $items) {
+    $stmt_checkin = $pdo->prepare("
+        SELECT staff_id, MIN(checkin_time) AS first_checkin
+        FROM checkin
+        WHERE DATE(checkin_time) = :booking_date
+        GROUP BY staff_id
+        ORDER BY first_checkin ASC
+    ");
+    $stmt_checkin->execute([':booking_date' => $booking_date]);
+    $checked_in_staff_ids = array_map('intval', $stmt_checkin->fetchAll(PDO::FETCH_COLUMN));
+
+    if (empty($checked_in_staff_ids)) {
+        throw new BookingAvailabilityException('ขณะนี้ไม่มีหมอนวดว่างให้บริการในช่วงเวลานี้ กรุณาเลือกวันหรือเวลาอื่น');
+    }
+
+    $stmt_skills = $pdo->query("SELECT staff_id, service_id FROM staff_services");
+    $staff_skills = [];
+    while ($row = $stmt_skills->fetch(PDO::FETCH_ASSOC)) {
+        $staff_skills[(int)$row['staff_id']][] = (int)$row['service_id'];
+    }
+
+    $stmt_service = $pdo->prepare("SELECT duration, commission FROM allservices WHERE id = :service_id");
+    $assignment_tasks = [];
+    $planned_intervals = [];
+    $booking_start = strtotime("$booking_date $booking_time");
+
+    foreach ($items as $item_index => $item) {
+        $service_ids = array_values(array_filter(array_map('intval', $item['service_ids'] ?? [])));
+        if (empty($service_ids)) {
+            throw new BookingAvailabilityException('กรุณาเลือกบริการให้ครบถ้วน');
+        }
+
+        $duration = 0;
+        $total_commission = 0;
+        foreach ($service_ids as $service_id) {
+            $stmt_service->execute([':service_id' => $service_id]);
+            $service = $stmt_service->fetch(PDO::FETCH_ASSOC);
+            if (!$service) {
+                throw new BookingAvailabilityException('ไม่พบข้อมูลบริการที่เลือก กรุณาตรวจสอบรายการอีกครั้ง');
+            }
+            $duration += (int)$service['duration'];
+            $total_commission += (float)$service['commission'];
+        }
+
+        $assignment_tasks[] = [
+            'item_index' => $item_index,
+            'service_ids' => $service_ids,
+            'duration' => $duration,
+            'total_commission' => $total_commission,
+            'requested_staff_id' => !empty($item['staff_id']) ? (int)$item['staff_id'] : null
+        ];
+    }
+
+    usort($assignment_tasks, static function ($a, $b) {
+        $commission_order = $b['total_commission'] <=> $a['total_commission'];
+        return $commission_order !== 0
+            ? $commission_order
+            : ($a['item_index'] <=> $b['item_index']);
+    });
+
+    $planned_assignments = [];
+    foreach ($assignment_tasks as $task) {
+        $item_index = $task['item_index'];
+        $service_ids = $task['service_ids'];
+        $duration = $task['duration'];
+        $requested_staff_id = $task['requested_staff_id'];
+        $candidates = $requested_staff_id ? [$requested_staff_id] : $checked_in_staff_ids;
+        $assigned_staff_id = null;
+
+        foreach ($candidates as $staff_id) {
+            if (!in_array($staff_id, $checked_in_staff_ids, true)) {
+                continue;
+            }
+
+            $has_all_skills = true;
+            foreach ($service_ids as $service_id) {
+                if (!in_array($service_id, $staff_skills[$staff_id] ?? [], true)) {
+                    $has_all_skills = false;
+                    break;
+                }
+            }
+            if (!$has_all_skills || !isStaffAvailable($pdo, $staff_id, $booking_date, $booking_time, $duration, 0)) {
+                continue;
+            }
+
+            $booking_end = $booking_start + ($duration * 60);
+            $overlaps_planned_booking = false;
+            foreach ($planned_intervals[$staff_id] ?? [] as $interval) {
+                if ($booking_start < $interval['end'] && $booking_end > $interval['start']) {
+                    $overlaps_planned_booking = true;
+                    break;
+                }
+            }
+            if ($overlaps_planned_booking) {
+                continue;
+            }
+
+            $assigned_staff_id = $staff_id;
+            $planned_intervals[$staff_id][] = [
+                'start' => $booking_start,
+                'end' => $booking_end
+            ];
+            break;
+        }
+
+        if ($assigned_staff_id === null) {
+            throw new BookingAvailabilityException('ขณะนี้ไม่มีหมอนวดที่เช็กอิน มีทักษะ และว่างให้บริการในช่วงเวลานี้ กรุณาเลือกเวลาอื่น');
+        }
+
+        $planned_assignments[$item_index] = $assigned_staff_id;
+    }
+
+    return $planned_assignments;
+}
+
+class BookingAvailabilityException extends RuntimeException
+{
+}

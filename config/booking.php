@@ -28,7 +28,8 @@ $closetime = '22:00';
 $error_message = '';
 $step = isset($_POST['step']) ? (int)$_POST['step'] : (int)($_GET['step'] ?? 1);
 $booking_error = $_SESSION['booking_error'] ?? '';
-unset($_SESSION['booking_error']);
+$booking_error_type = $_SESSION['booking_error_type'] ?? 'coupon';
+unset($_SESSION['booking_error'], $_SESSION['booking_error_type']);
 
 // --- STEP 1 -> STEP 2 ---
 if ($step === 2 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['booking_date'])) {
@@ -142,6 +143,31 @@ foreach ($all_services as $s) {
     $services_by_cat[$cat][$group][] = $s;
 }
 
+$services_by_id = [];
+foreach ($all_services as $service) {
+    $services_by_id[(int)$service['id']] = $service;
+}
+
+$initial_service_selections = [];
+$initial_staff_selections = [];
+if ($booking_error_type === 'availability') {
+    foreach ($_SESSION['booking']['items'] ?? [] as $person_idx => $item) {
+        $initial_staff_selections[$person_idx] = $item['staff_id'] ?? '';
+        foreach ($item['service_ids'] ?? [] as $service_id) {
+            $service_id = (int)$service_id;
+            if (isset($services_by_id[$service_id])) {
+                $service = $services_by_id[$service_id];
+                $initial_service_selections[$person_idx][] = [
+                    'id' => $service_id,
+                    'name' => $service['name'],
+                    'duration' => (int)$service['duration'],
+                    'price' => (float)$service['price']
+                ];
+            }
+        }
+    }
+}
+
 $user_id = $_SESSION['user_id'] ?? 0;
 $stmt_user = $pdo->prepare("SELECT phone FROM customers WHERE cus_id = :id");
 $stmt_user->execute([':id' => $user_id]);
@@ -210,8 +236,8 @@ if (!empty($booked_service_ids) && $user_id > 0) {
       x-data="{ 
         openModal: false, 
         activePerson: 1, 
-        selectedServices: {}, 
-        selectedStaffs: {},
+        selectedServices: <?= htmlspecialchars(json_encode($initial_service_selections), ENT_QUOTES, 'UTF-8') ?>,
+        selectedStaffs: <?= htmlspecialchars(json_encode($initial_staff_selections), ENT_QUOTES, 'UTF-8') ?>,
         staffSkillsMap: <?= htmlspecialchars(json_encode($staff_skills_map ?? []), ENT_QUOTES, 'UTF-8') ?>,
         showPhoneModal: false,
         userPhone: '<?= htmlspecialchars($user_phone ?? '', ENT_QUOTES) ?>',
@@ -323,11 +349,20 @@ if (!empty($booked_service_ids) && $user_id > 0) {
                 $customer_count = $_SESSION['booking']['customer_count'] ?? 1;
                 $booking_date   = $_SESSION['booking']['booking_date'] ?? '';
                 $booking_time   = $_SESSION['booking']['booking_time'] ?? '';
+                $checkin_filter = '';
+                if ($booking_date === $today) {
+                    $checkin_filter = "AND EXISTS (
+                        SELECT 1 FROM checkin c
+                        WHERE c.staff_id = s.staff_id
+                          AND DATE(c.checkin_time) = :booking_date_checkin
+                    )";
+                }
 
                 // 🟢 Query ดึงพนักงาน โดยเช็คช่วงเวลาซ้อนทับ (Time Overlap) ร่วมกับวันหยุด
                 $sql = "SELECT s.staff_id, s.name, s.nickname 
                         FROM staffs s 
                         WHERE (s.day_off IS NULL OR LOWER(DAYNAME(:booking_date)) != LOWER(s.day_off))
+                        {$checkin_filter}
                         AND s.staff_id NOT IN (
                             SELECT b.staff_id 
                             FROM bookings b
@@ -348,12 +383,16 @@ if (!empty($booked_service_ids) && $user_id > 0) {
                         )";
 
                 $stmt_staff = $pdo->prepare($sql);
-                $stmt_staff->execute([
+                $staff_params = [
                     ':booking_date'       => $booking_date,
                     ':booking_date_check' => $booking_date,
                     ':new_booking_time'   => $booking_time,
                     ':new_booking_time2'  => $booking_time
-                ]);
+                ];
+                if ($booking_date === $today) {
+                    $staff_params[':booking_date_checkin'] = $booking_date;
+                }
+                $stmt_staff->execute($staff_params);
                 $staffs = $stmt_staff->fetchAll(PDO::FETCH_ASSOC);
             ?>
 
@@ -566,10 +605,10 @@ if (!empty($booked_service_ids) && $user_id > 0) {
         <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" role="alertdialog" aria-modal="true" aria-labelledby="coupon-error-title">
             <div class="w-full max-w-sm rounded-2xl border border-red-200 bg-white p-6 text-center shadow-2xl">
                 <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-2xl text-red-600">!</div>
-                <h2 id="coupon-error-title" class="mb-2 text-lg font-bold text-[#382214]">ไม่สามารถใช้คูปองได้</h2>
+                <h2 id="coupon-error-title" class="mb-2 text-lg font-bold text-[#382214]"><?= $booking_error_type === 'availability' ? 'ไม่มีหมอนวดว่าง' : 'ไม่สามารถใช้คูปองได้' ?></h2>
                 <p class="mb-5 text-sm text-gray-700"><?= htmlspecialchars($booking_error, ENT_QUOTES, 'UTF-8') ?></p>
                 <button type="button" onclick="this.closest('[role=alertdialog]').remove()" class="rounded-xl bg-[#382214] px-5 py-2 text-sm font-medium text-white hover:bg-[#5A3A29]">
-                    กลับไปตรวจสอบคูปอง
+                    <?= $booking_error_type === 'availability' ? 'กลับไปแก้ไขรายการจอง' : 'กลับไปตรวจสอบคูปอง' ?>
                 </button>
             </div>
         </div>
