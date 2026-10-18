@@ -63,7 +63,8 @@ $sql_bookings = "SELECT b.*,
                         s.nickname as staff_nickname, s.name as staff_name,
                         srv.name as default_service_name, srv.duration as default_duration, srv.price as default_price,
                         p.payment_method as payment_method,
-                        p.slip_image as slip_image
+                        p.slip_image as slip_image,
+                        p.coupon_code as coupon_code
                  FROM bookings b
                  LEFT JOIN customers c ON b.cus_id = c.cus_id
                  LEFT JOIN staffs s ON b.staff_id = s.staff_id
@@ -74,7 +75,8 @@ if (!empty($where_clauses)) {
     $sql_bookings .= " WHERE " . implode(" AND ", $where_clauses);
 }
 
-$sql_bookings .= " ORDER BY b.created_at DESC";
+// 🟢 เพิ่ม GROUP BY b.id ตรงนี้ เพื่อยุบแถวที่ซ้ำจากการ JOIN ตารางอื่น
+$sql_bookings .= " GROUP BY b.id ORDER BY b.created_at DESC";
 
 // 🟢 ดึงข้อมูลรายการคิวจองที่กรองแล้วลงตัวแปร $bookings
 $stmt_b = $pdo->prepare($sql_bookings);
