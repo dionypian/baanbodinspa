@@ -86,7 +86,7 @@ $conn_srv->close();
     <div class="bg-white rounded-2xl shadow-sm border border-[#E8E2D5] overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-base text-gray-600">
-                <thead class="bg-[#FDFBF7] text-[#382214] font-semibold border-b border-[#E8E2D5]">
+                <thead class="bg-[#FDFBF7] text-lg text-[#382214] font-semibold border-b border-[#E8E2D5]">
                     <tr>
                         <th class="p-4">ลำดับ</th>
                         <th class="p-4">ชื่อเล่น</th>

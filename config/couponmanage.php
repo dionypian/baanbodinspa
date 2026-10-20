@@ -121,7 +121,7 @@ $admin_coupons = $stmt_ca->fetchAll(PDO::FETCH_ASSOC);
     <div class="bg-white rounded-2xl shadow-sm border border-[#E8E2D5] overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-base text-gray-600">
-                <thead class="bg-[#FDFBF7] text-[#382214] font-semibold border-b border-[#E8E2D5]">
+                <thead class="bg-[#FDFBF7] text-lg text-[#382214] font-semibold border-b border-[#E8E2D5]">
                     <tr>
                         <th class="p-4">ลำดับ</th>
                         <th class="p-4">ชื่อแพ็กเกจคูปอง</th>
@@ -138,21 +138,21 @@ $admin_coupons = $stmt_ca->fetchAll(PDO::FETCH_ASSOC);
                         </tr>
                     <?php else: ?>
                         <?php $i = 1; foreach ($admin_coupons as $ac): ?>
-                            <tr class="hover:bg-gray-50 transition-colors">
+                            <tr class="hover:bg-gray-50 transition-colors text-base">
                                 <td class="p-4 font-medium"><?= $i++ ?></td>
                                 <td class="p-4 font-bold text-[#382214]"><?= htmlspecialchars($ac['coupon_name']) ?></td>
                                 <td class="p-4">
                                     <?php if (!empty($ac['service_name'])): ?>
-                                        <span class="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg text-sm">
-                                            💆‍♀️ <?= htmlspecialchars($ac['service_name']) ?> (<?= $ac['service_duration'] ?> นาที)
+                                        <span class="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg">
+                                            <?= htmlspecialchars($ac['service_name']) ?> (<?= $ac['service_duration'] ?> นาที)
                                         </span>
                                     <?php else: ?>
                                         <span class="text-gray-400 font-normal text-sm">- ยังไม่ได้ผูกบริการ -</span>
                                     <?php endif; ?>
                                 </td>
                                 <td class="p-4">
-                                    <span class="inline-flex items-center gap-1 font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-lg text-sm">
-                                        🎫 <?= number_format($ac['total_leaves']) ?> ใบ
+                                    <span class="inline-flex items-center gap-1 font-semibold text-[#382214]">
+                                        <?= number_format($ac['total_leaves']) ?> ใบ
                                     </span>
                                 </td>
                                 <td class="p-4 font-bold text-[#047857]">฿<?= number_format($ac['price'], 2) ?></td>
@@ -164,13 +164,13 @@ $admin_coupons = $stmt_ca->fetchAll(PDO::FETCH_ASSOC);
                                             data-price="<?= $ac['price'] ?>"
                                             data-leaves="<?= $ac['total_leaves'] ?>"
                                             onclick="openEditCouponModal(this)"
-                                            class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-ml font-medium transition-colors">
+                                            class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-lg font-medium transition-colors">
                                         แก้ไข
                                     </button>
 
                                     <button type="button"
                                             onclick="openDeleteCouponModal(<?= $ac['coupon_id'] ?>, '<?= htmlspecialchars($ac['coupon_name'], ENT_QUOTES, 'UTF-8') ?>')"
-                                            class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-ml font-medium transition-colors">
+                                            class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-lg font-medium transition-colors">
                                         ลบ
                                     </button>
                                 </td>
