@@ -194,16 +194,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $booking_date   = $_SESSION['admin_booking']['booking_date'] ?? '';
                 $booking_time   = $_SESSION['admin_booking']['booking_time'] ?? '';
 
-                // 1. ดึงพนักงานทั้งหมดที่ไม่ได้หยุดประจำวัน (ไม่กรองเวลาที่นี่ เพื่อให้นำไปเช็คช่วงเวลาซ้อนทับใน JS)
-                $sql = "SELECT s.staff_id, s.name, s.nickname 
-                        FROM staffs s 
-                        WHERE (s.day_off IS NULL OR DAYNAME(:booking_date) != s.day_off)";
+                $is_booking_today = ($booking_date === date('Y-m-d'));
+
+                if ($is_booking_today) {
+                    // จองวันนี้: ดึงเฉพาะพนักงานที่ Check-in เข้างานมาแล้วในวันนี้
+                    $sql = "SELECT DISTINCT s.staff_id, s.name, s.nickname 
+                            FROM staffs s
+                            INNER JOIN checkin c ON s.staff_id = c.staff_id
+                            WHERE DATE(c.checkin_time) = :booking_date";
+                } else {
+                    // จองวันอื่น: ดึงพนักงานที่ไม่ได้หยุดประจำวันนั้น (เหมือนเดิม)
+                    $sql = "SELECT s.staff_id, s.name, s.nickname 
+                            FROM staffs s 
+                            WHERE (s.day_off IS NULL OR DAYNAME(:booking_date) != s.day_off)";
+                }
 
                 $stmt_staff = $pdo->prepare($sql);
                 $stmt_staff->execute([':booking_date' => $booking_date]);
                 $staffs = $stmt_staff->fetchAll(PDO::FETCH_ASSOC);
 
-                // 🟢 2. ดึงคิวจองทั้งหมดในวันที่เลือก เพื่อคำนวณช่วงเวลาที่หมอนวดติดคิว (เวลาเริ่ม - เวลาจบ)
+                // ดึงคิวจองทั้งหมดในวันที่เลือก เพื่อคำนวณช่วงเวลาที่หมอนวดติดคิว (เวลาเริ่ม - เวลาจบ)
                 $sql_busy = "SELECT b.staff_id, b.booking_time, SUM(srv.duration) as total_duration
                             FROM bookings b
                             LEFT JOIN booking_items bi ON b.id = bi.booking_id

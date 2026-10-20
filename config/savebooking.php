@@ -26,12 +26,20 @@ if (!$cus_id || empty($items) || empty($booking_date) || empty($booking_time)) {
     die("ข้อมูลการจองใน Session ไม่สมบูรณ์");
 }
 
-if (!empty($cus_phone) && $user_id > 0) {
-    $stmt_update_phone = $pdo->prepare("UPDATE customers SET phone = :phone WHERE cus_id = :id AND (phone IS NULL OR phone = '')");
-    $stmt_update_phone->execute([
-        ':phone' => $cus_phone,
-        ':id'    => $user_id
-    ]);
+if (!empty($cus_phone) && strlen($cus_phone) >= 9 && !empty($cus_id)) {
+    // 1. เช็กก่อนว่าลูกค้ายังไม่มีเบอร์โทรศัพท์ในระบบ
+    $stmt_chk_phone = $pdo->prepare("SELECT phone FROM customers WHERE cus_id = :cus_id");
+    $stmt_chk_phone->execute([':cus_id' => $cus_id]);
+    $existing_phone = trim($stmt_chk_phone->fetchColumn() ?: '');
+
+    // 2. ถ้ายังไม่มีเบอร์ ค่อยทำการ UPDATE
+    if (empty($existing_phone)) {
+        $stmt_update_phone = $pdo->prepare("UPDATE customers SET phone = :phone WHERE cus_id = :cus_id");
+        $stmt_update_phone->execute([
+            ':phone'  => $cus_phone,
+            ':cus_id' => $cus_id
+        ]);
+    }
 }
 
 try {
@@ -206,10 +214,11 @@ try {
             $stmt_use = $pdo->prepare("
                 UPDATE cus_coupon 
                 SET used = 1
-                WHERE id = :id
+                WHERE id = :id AND cus_id = :cus_id
             ");
             $stmt_use->execute([
-                ':id'   => $use_coupon_id
+                ':id'     => $use_coupon_id,
+                ':cus_id' => $cus_id 
             ]);
         }
     }
@@ -245,5 +254,5 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    die("เกิดข้อผิดพลาด: " . $e->getMessage());
+    die("เกิดข้อผิดพลาดที่บรรทัด " . $e->getLine() . ": " . $e->getMessage());
 }

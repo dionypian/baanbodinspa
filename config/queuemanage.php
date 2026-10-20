@@ -217,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <!-- แสดงช่องทางชำระเงินเล็กๆ เมื่อสำเร็จแล้ว -->
                                 <?php if ($b['status'] === 'completed' && !empty($b['payment_method'])): ?>
                                     <div class="mt-1 text-[14px] text-gray-500">
-                                        ชำระโดย: <span class="font-semibold uppercase text-amber-800"><?= $b['payment_method'] ?></span>
+                                        ชำระโดย: <span class="font-semibold uppercase text-amber-800"><?= htmlspecialchars($b['payment_method']) ?></span>
                                     </div>
                                 <?php endif; ?>
                             </td>
@@ -404,10 +404,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         type="text"
                         id="coupon_code_input"
                         name="coupon_code"
-                        class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm uppercase bg-gray-100 text-gray-700 font-semibold focus:outline-none cursor-not-allowed"
-                        readonly
+                        placeholder="กรอกรหัสคูปอง"
+                        class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm uppercase bg-gray-100 text-gray-700 font-semibold focus:outline-none"
                     >
-                    <p class="text-xs text-amber-800 mt-1">*คูปองถูกผูกกับรายการจองนี้อัตโนมัติ ไม่สามารถแก้ไขได้*</p>
+                    <p id="coupon_note_text" class="text-xs text-amber-800 mt-1">*คูปองถูกผูกกับรายการจองนี้อัตโนมัติ ไม่สามารถแก้ไขได้*</p>
                 </div>
 
                 <div class="flex gap-2 pt-2">
@@ -663,6 +663,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         const modal = document.getElementById('completeModal');
         modal.dataset.totalPrice = totalPrice;
 
+        // เช็คว่าคิวนี้มีคูปองผูกมาตั้งแต่จองหรือไม่
+        const hasAutoCoupon = (paymentMethod === 'coupon' || (couponCode && couponCode.trim() !== ''));
+        modal.dataset.hasAutoCoupon = hasAutoCoupon ? 'true' : 'false';
+
         const select = document.getElementById('payment_method_select');
         const couponInput = document.getElementById('coupon_code_input');
 
@@ -688,17 +692,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         const qrWrapper = document.getElementById('qr_code_wrapper');
         const couponWrapper = document.getElementById('coupon_code_wrapper');
         const modal = document.getElementById('completeModal');
+        const couponInput = document.getElementById('coupon_code_input');
+        const couponNote = document.getElementById('coupon_note_text');
         
         const totalPrice = modal.dataset.totalPrice || 0;
+        const isAutoCoupon = (modal.dataset.hasAutoCoupon === 'true');
 
         // จัดการแสดงผลช่องคูปอง
         if (select.value === 'coupon') {
             couponWrapper.classList.remove('hidden');
-            // เนื่องจากเป็นคูปองที่ลูกค้าจองมาแล้ว ไม่ต้องบังคับกรอกใหม่ (เพราะใส่ค่า readonly ไว้แล้ว)
-            document.getElementById('coupon_code_input').removeAttribute('required');
+            
+            if (isAutoCoupon) {
+                // คิวที่มีคูปองผูกมาแล้ว -> ล็อกห้ามแก้
+                if (couponInput) {
+                    couponInput.readOnly = true;
+                    couponInput.required = false;
+                    couponInput.className = "w-full border border-gray-300 rounded-xl px-3 py-2 text-sm uppercase bg-gray-100 text-gray-700 font-semibold focus:outline-none cursor-not-allowed";
+                }
+                if (couponNote) {
+                    couponNote.innerText = "*คูปองถูกผูกกับรายการจองนี้อัตโนมัติ ไม่สามารถแก้ไขได้*";
+                }
+            } else {
+                // แอดมินเลือกคูปองเอง -> ปลดล็อกให้พิมพ์รหัสคูปองได้
+                if (couponInput) {
+                    couponInput.readOnly = false;
+                    couponInput.required = true;
+                    couponInput.className = "w-full border border-gray-300 rounded-xl px-3 py-2 text-sm uppercase bg-white text-gray-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#047857]";
+                }
+                if (couponNote) {
+                    couponNote.innerText = "*กรุณากรอกรหัสคูปองที่ต้องการใช้ชำระ*";
+                }
+            }
         } else {
             couponWrapper.classList.add('hidden');
-            document.getElementById('coupon_code_input').value = '';
+            if (couponInput) {
+                couponInput.value = '';
+                couponInput.required = false;
+            }
         }
 
         // จัดการแสดงผล QR โอนเงิน

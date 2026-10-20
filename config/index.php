@@ -196,7 +196,7 @@
                 <!-- โปรโมชั่นที่ 1 -->
                 <article class="flex flex-col group cursor-pointer">
                         <div class="relative overflow-hidden rounded-md aspect-[16/10] mb-4">
-                            <img src="image/promo1.png" alt="Promo 1"
+                            <img src="image/promo.png" alt="Promo 1"
                                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                             <span
                                 class="absolute bottom-0 left-0 bg-[#047857] text-white text-xs font-semibold px-3 py-1.5 uppercase tracking-wider">
@@ -204,7 +204,7 @@
                             </span>
                         </div>
                         <h4 class="text-lg font-bold text-[#382214] transition-colors leading-snug mb-2 line-clamp-2">
-                            โปรโมชั่นเล่มคูปองประจำเดือนสิงหาคม 2569
+                            โปรโมชั่นเล่มคูปอง
                         </h4>
                         <a href="news-detail.php?id=1"
                             class="text-ml font-bold text-[#A67C52] underline underline-offset-4 hover:text-[#8C6239] transition-colors mt-auto inline-block">

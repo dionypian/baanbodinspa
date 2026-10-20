@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
     }
 
-    // 1. ดึงข้อมูลเล่มคูปองที่เลือก
+    // 1. ดึงข้อมูลเล่มคูปอง
     $sql_c = "SELECT * FROM coupon WHERE coupon_id = :coupon_id";
     $stmt_c = $pdo->prepare($sql_c);
     $stmt_c->execute([':coupon_id' => $coupon_id]);
@@ -83,13 +83,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $total_price = $target_coupon['price'];
             $total_leaves = intval($target_coupon['total_leaves']);
 
-            // 🟢 2. ดึง service_id ทั้งหมด (id: 1, 2, 3, 4, 5, 6) ที่ผูกกับ coupon_id นี้
-            $sql_s = "SELECT id FROM allservices WHERE coupon_id = :coupon_id ORDER BY id ASC";
+            // ดึง service_id จากตาราง allservices ที่ผูกกับ coupon_id นี้โดยเฉพาะ
+            $sql_s = "SELECT id FROM allservices WHERE coupon_id = :coupon_id LIMIT 1";
             $stmt_s = $pdo->prepare($sql_s);
             $stmt_s->execute([':coupon_id' => $coupon_id]);
-            $service_ids = $stmt_s->fetchAll(PDO::FETCH_COLUMN); // ได้ Array: [1, 2, 3, 4, 5, 6]
+            $service_id = $stmt_s->fetchColumn(); // จะได้ค่า id บริการจากฐานข้อมูลโดยอัตโนมัติ (เช่น 1)
 
-            // 3. บันทึกลงตาราง coupon_book
+            // 2. บันทึกลงตาราง coupon_book
             $sql_book = "INSERT INTO coupon_book (cus_id, coupon_id, total_price, payment_method, slip_image, sold_date) 
                          VALUES (:cus_id, :coupon_id, :total_price, :payment_method, :slip_image, NOW())";
             $stmt_book = $pdo->prepare($sql_book);
@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
             $coupon_book_id = $pdo->lastInsertId();
 
-            // 🟢 4. สร้างใบคูปอง 6 ใบ โดยกำหนด service_id ให้แยกเป็น 1, 2, 3, 4, 5, 6 ตามลำดับ
+            // 3. สร้างใบคูปองลงตาราง cus_coupon โดยใช้ service_id ที่ดึงได้จากฐานข้อมูล
             $sql_cus_coupon = "INSERT INTO cus_coupon (coupon_book_id, cus_id, coupon_id, service_id, coupon_code, used) 
                                VALUES (:coupon_book_id, :cus_id, :coupon_id, :service_id, :coupon_code, 0)";
             $stmt_cc = $pdo->prepare($sql_cus_coupon);
@@ -111,21 +111,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             for ($i = 0; $i < $total_leaves; $i++) {
                 $coupon_code = generateNextCouponCode($pdo);
                 
-                // ดึง service_id ตามลำดับ index $i (ใบที่ 1 ได้ id: 1, ใบที่ 2 ได้ id: 2, ...)
-                $assigned_service_id = $service_ids[$i] ?? null;
-
                 $stmt_cc->execute([
                     ':coupon_book_id' => $coupon_book_id,
                     ':cus_id' => $cus_id,
                     ':coupon_id' => $coupon_id,
-                    ':service_id' => $assigned_service_id,
+                    ':service_id' => $service_id ?: null, // ใช้ค่าที่ดึงได้จากตาราง allservices
                     ':coupon_code' => $coupon_code
                 ]);
             }
 
             $pdo->commit();
 
-            $_SESSION['flash_message'] = "สั่งซื้อเล่มคูปองสำเร็จ! คุณได้รับคูปองนวดครบทั้ง 6 รายการ";
+            $_SESSION['flash_message'] = "สั่งซื้อเล่มคูปองสำเร็จ! คุณได้รับคูปองเพิ่ม {$total_leaves} ใบ";
             $_SESSION['flash_type'] = "success";
 
         } catch (Exception $e) {

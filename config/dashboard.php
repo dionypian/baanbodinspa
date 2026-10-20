@@ -1,12 +1,17 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+    header("Location: login.php");
+    exit();
+}
+
 // เปิด Error Reporting เพื่อช่วยในการ Debug
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 require_once 'db-connect.php';
 date_default_timezone_set('Asia/Bangkok');
@@ -106,9 +111,34 @@ function getAvailableStaffs($pdo, $booking_date, $booking_time, $duration_minute
     $end_dt   = date('Y-m-d H:i:s', strtotime("$start_dt + {$duration_minutes} minutes"));
     $day_of_week = date('l', strtotime($booking_date));
 
+    // 🟢 1. ตรวจสอบว่าเป็นคิวของ "วันนี้" หรือไม่
+    $is_booking_today = ($booking_date === date('Y-m-d'));
+
+    // ตั้งค่า Parameter พื้นฐานสำหรับเช็คช่วงเวลาซ้อนทับ
+    $params = [
+        ':b_date'   => $booking_date,
+        ':start_dt' => $start_dt,
+        ':end_dt'   => $end_dt
+    ];
+
+    if ($is_booking_today) {
+        // 📌 คิววันนี้: แยกชื่อพารามิเตอร์เป็น :checkin_date เพื่อไม่ให้ชื่อซ้ำกับ :b_date
+        $where_staff_condition = "s.staff_id IN (
+            SELECT DISTINCT c.staff_id 
+            FROM checkin c 
+            WHERE DATE(c.checkin_time) = :checkin_date
+        )";
+        $params[':checkin_date'] = $booking_date;
+    } else {
+        // 📌 คิววันอื่น: เลือกหมอที่ไม่ได้หยุดประจำวันนั้น
+        $where_staff_condition = "(s.day_off IS NULL OR LOWER(s.day_off) != LOWER(:day_of_week))";
+        $params[':day_of_week'] = $day_of_week;
+    }
+
+    // 🟢 2. คำสั่ง SQL กรองหมอนวดที่ไม่ติดคิวซ้อนทับ
     $sql = "SELECT s.* 
             FROM staffs s
-            WHERE (s.day_off IS NULL OR LOWER(s.day_off) != LOWER(:day_of_week))
+            WHERE {$where_staff_condition}
             AND s.staff_id NOT IN (
                 SELECT DISTINCT b.staff_id 
                 FROM bookings b
@@ -125,18 +155,11 @@ function getAvailableStaffs($pdo, $booking_date, $booking_time, $duration_minute
             )
             ORDER BY s.nickname ASC";
 
-    $stmt = $pdo->prepare($sql);
-    $params = [
-        ':day_of_week' => $day_of_week,
-        ':b_date'      => $booking_date,
-        ':start_dt'    => $start_dt,
-        ':end_dt'      => $end_dt
-    ];
-    
     if ($current_booking_id) {
         $params[':current_b_id'] = $current_booking_id;
     }
 
+    $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -186,7 +209,7 @@ $sql_summary_bookings = "
         s.duration,
         s.price,
         s.commission as hand_fee,
-        COALESCE(p.payment_method, b.payment_method) as payment_method,
+        p.payment_method as payment_method  ,
         p.coupon_code
     FROM bookings b
     INNER JOIN booking_items bi ON b.id = bi.booking_id
@@ -317,6 +340,15 @@ foreach ($summary_staffs as $st) {
                         </svg>
                         <span>จัดการบริการ</span>
                     </button>
+
+                    <!-- ปุ่มจัดแพ็คเกจ -->
+                    <button onclick="switchTab('coupons')" id="tab-btn-coupons"
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-ml font-medium transition-colors hover:bg-[#523826] text-[#E8E2D5]">
+                        <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                            <path d="M2 6a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 100 4v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2a2 2 0 100-4V6z"/>
+                        </svg>
+                        <span>จัดการแพ็คเกจ</span>
+                    </button>
                 </nav>
             </div>
 
@@ -371,6 +403,8 @@ foreach ($summary_staffs as $st) {
             <?php include 'staffmanage.php'; ?>
             
             <?php include 'servicemanage.php'; ?>
+
+            <?php include 'couponmanage.php'; ?>
         </main>
 
     <script>
@@ -379,27 +413,34 @@ foreach ($summary_staffs as $st) {
         const queueSec   = document.getElementById('section-queue');
         const staffSec   = document.getElementById('section-staff');
         const serviceSec = document.getElementById('section-service');
+        const couponSec  = document.getElementById('section-coupon'); 
 
         const summaryBtn = document.getElementById('tab-btn-summary');
         const queueBtn   = document.getElementById('tab-btn-queue');
         const staffBtn   = document.getElementById('tab-btn-staff');
         const serviceBtn = document.getElementById('tab-btn-service');
+        const couponBtn  = document.getElementById('tab-btn-coupons'); 
 
         const pageTitle  = document.getElementById('page-title');
 
+        // ซ่อนทุก Section
         if (summarySec) summarySec.classList.add('hidden');
         if (queueSec)   queueSec.classList.add('hidden');
         if (staffSec)   staffSec.classList.add('hidden');
         if (serviceSec) serviceSec.classList.add('hidden');
+        if (couponSec)  couponSec.classList.add('hidden');
 
         const inactiveClass = "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-ml font-medium transition-colors hover:bg-[#523826] text-[#E8E2D5]";
         const activeClass   = "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-ml font-medium transition-colors bg-[#D2BFA6] text-[#382214]";
 
+        // รีเซ็ตปุ่มเป็น inactive
         if (summaryBtn) summaryBtn.className = inactiveClass;
         if (queueBtn)   queueBtn.className   = inactiveClass;
         if (staffBtn)   staffBtn.className   = inactiveClass;
         if (serviceBtn) serviceBtn.className = inactiveClass;
+        if (couponBtn)  couponBtn.className  = inactiveClass;
 
+        // แสดงตามแท็บที่เลือก
         if (tab === 'summary') {
             if (summarySec) summarySec.classList.remove('hidden');
             if (summaryBtn) summaryBtn.className = activeClass;
@@ -416,6 +457,10 @@ foreach ($summary_staffs as $st) {
             if (serviceSec) serviceSec.classList.remove('hidden');
             if (serviceBtn) serviceBtn.className = activeClass;
             if (pageTitle)  pageTitle.innerText  = "จัดการบริการ (Service Management)";
+        } else if (tab === 'coupons') {
+            if (couponSec)  couponSec.classList.remove('hidden');
+            if (couponBtn)  couponBtn.className  = activeClass;
+            if (pageTitle)  pageTitle.innerText  = "จัดการแพ็คเกจคูปอง (Coupon Management)";
         }
     }
 

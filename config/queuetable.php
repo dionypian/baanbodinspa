@@ -167,7 +167,7 @@
                        <!-- แสดงเวลา Check-in  -->
                         <td class="border border-gray-400 p-2 font-bold text-gray-800">
                             <?php if (!empty($st['checkin_time'])): ?>
-                                <div class="text-xs font-bold text-emerald-700">
+                                <div class="text-sm font-bold text-[#382214]    ">
                                     <?= date('H:i', strtotime($st['checkin_time'])) ?> น.
                                 </div>
                             <?php else: ?>

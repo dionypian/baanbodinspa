@@ -7,11 +7,18 @@ function autoAssignStaffToBookings($pdo, $target_date = null) {
         $target_date = date('Y-m-d');
     }
 
-    // 1. ดึงรายชื่อหมอนวดที่ Check-in ในวันที่กำหนด (เรียงคนมาเช้าสุดขึ้นก่อน)
-    $sql_checkin = "SELECT DISTINCT c.staff_id, c.checkin_time 
+    // 1. ดึงรายชื่อหมอนวดที่ Check-in (เรียงจากจำนวนงานน้อยสุด > คนมาเช้าสุดขึ้นก่อน)
+    $sql_checkin = "SELECT 
+                        c.staff_id, 
+                        c.checkin_time,
+                        COUNT(b.id) AS job_count
                     FROM checkin c
+                    LEFT JOIN bookings b ON c.staff_id = b.staff_id 
+                                        AND b.booking_date = :target_date 
+                                        AND b.status IN ('pending', 'confirmed', 'completed')
                     WHERE DATE(c.checkin_time) = :target_date
-                    ORDER BY c.checkin_time ASC";
+                    GROUP BY c.staff_id, c.checkin_time
+                    ORDER BY job_count ASC, c.checkin_time ASC";
     $stmt_c = $pdo->prepare($sql_checkin);
     $stmt_c->execute([':target_date' => $target_date]);
     $checked_in_staffs = $stmt_c->fetchAll(PDO::FETCH_ASSOC);
@@ -94,6 +101,24 @@ function autoAssignStaffToBookings($pdo, $target_date = null) {
                 ]);
                 
                 $assigned_count++;
+
+                // อัปเดตอันดับหมอนวดใหม่ใน Memory ทันที เพื่อให้คิวจองถัดไปในลูปพิจารณาหมอคนอื่นที่มีงานน้อยกว่า
+                $checked_in_staffs = array_map(function($st) use ($staff_id) {
+                    if ($st['staff_id'] == $staff_id) {
+                        $st['job_count']++;
+                    }
+                    return $st;
+                }, $checked_in_staffs);
+
+                // จัดเรียงลำดับใหม่ (รอบงานน้อยสุดขึ้นก่อน)
+                usort($checked_in_staffs, function($a, $b) {
+                    if ($a['job_count'] == $b['job_count']) {
+                        return strtotime($a['checkin_time']) <=> strtotime($b['checkin_time']);
+                    }
+                    return $a['job_count'] <=> $b['job_count'];
+                });
+
+                $staff_priority_ids = array_column($checked_in_staffs, 'staff_id');
                 break; // จัดงานให้คิวนี้สำเร็จแล้ว ไปจัดคิวถัดไป
             }
         }
@@ -138,17 +163,35 @@ function isStaffAvailable($pdo, $staff_id, $booking_date, $booking_time, $durati
 
 function planSameDayStaffAssignments($pdo, $booking_date, $booking_time, array $items) {
     $stmt_checkin = $pdo->prepare("
-        SELECT staff_id, MIN(checkin_time) AS first_checkin
-        FROM checkin
-        WHERE DATE(checkin_time) = :booking_date
-        GROUP BY staff_id
-        ORDER BY first_checkin ASC
+        SELECT 
+            c.staff_id, 
+            MIN(c.checkin_time) AS first_checkin,
+            COUNT(b.id) AS existing_jobs
+        FROM checkin c
+        LEFT JOIN bookings b ON c.staff_id = b.staff_id 
+                            AND b.booking_date = :booking_date 
+                            AND b.status IN ('pending', 'confirmed', 'completed')
+        WHERE DATE(c.checkin_time) = :checkin_date
+        GROUP BY c.staff_id
     ");
-    $stmt_checkin->execute([':booking_date' => $booking_date]);
-    $checked_in_staff_ids = array_map('intval', $stmt_checkin->fetchAll(PDO::FETCH_COLUMN));
+    $stmt_checkin->execute([
+        ':booking_date' => $booking_date,
+        ':checkin_date' => $booking_date
+    ]);
 
-    if (empty($checked_in_staff_ids)) {
+    $staff_data = $stmt_checkin->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($staff_data)) {
         throw new BookingAvailabilityException('ขณะนี้ไม่มีหมอนวดว่างให้บริการในช่วงเวลานี้ กรุณาเลือกวันหรือเวลาอื่น');
+    }
+
+    // สร้าง Map เก็บจำนวนงานสะสมของหมอแต่ละคน
+    $staff_job_counts = [];
+    foreach ($staff_data as $sd) {
+        $staff_job_counts[(int)$sd['staff_id']] = [
+            'count' => (int)$sd['existing_jobs'],
+            'checkin_time' => strtotime($sd['first_checkin'])
+        ];
     }
 
     $stmt_skills = $pdo->query("SELECT staff_id, service_id FROM staff_services");
@@ -202,11 +245,21 @@ function planSameDayStaffAssignments($pdo, $booking_date, $booking_time, array $
         $service_ids = $task['service_ids'];
         $duration = $task['duration'];
         $requested_staff_id = $task['requested_staff_id'];
-        $candidates = $requested_staff_id ? [$requested_staff_id] : $checked_in_staff_ids;
+
+        // เรียงลำดับหมอนวดจาก (1) จำนวนงานสะสมน้อยที่สุด -> (2) เวลาเช็กอิน
+        $candidate_ids = array_keys($staff_job_counts);
+        usort($candidate_ids, function($idA, $idB) use ($staff_job_counts) {
+            if ($staff_job_counts[$idA]['count'] === $staff_job_counts[$idB]['count']) {
+                return $staff_job_counts[$idA]['checkin_time'] <=> $staff_job_counts[$idB]['checkin_time'];
+            }
+            return $staff_job_counts[$idA]['count'] <=> $staff_job_counts[$idB]['count'];
+        });
+
+        $candidates = $requested_staff_id ? [$requested_staff_id] : $candidate_ids;
         $assigned_staff_id = null;
 
         foreach ($candidates as $staff_id) {
-            if (!in_array($staff_id, $checked_in_staff_ids, true)) {
+            if (!isset($staff_job_counts[$staff_id])) {
                 continue;
             }
 
@@ -238,6 +291,9 @@ function planSameDayStaffAssignments($pdo, $booking_date, $booking_time, array $
                 'start' => $booking_start,
                 'end' => $booking_end
             ];
+
+            // 🟢 เพิ่มจำนวนงานสะสมของหมอคนที่ได้งาน
+            $staff_job_counts[$staff_id]['count']++;
             break;
         }
 
