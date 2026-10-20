@@ -26,24 +26,22 @@ if (!$cus_id || empty($items) || empty($booking_date) || empty($booking_time)) {
     die("ข้อมูลการจองใน Session ไม่สมบูรณ์");
 }
 
-if (!empty($cus_phone) && strlen($cus_phone) >= 9 && !empty($cus_id)) {
-    // 1. เช็กก่อนว่าลูกค้ายังไม่มีเบอร์โทรศัพท์ในระบบ
-    $stmt_chk_phone = $pdo->prepare("SELECT phone FROM customers WHERE cus_id = :cus_id");
-    $stmt_chk_phone->execute([':cus_id' => $cus_id]);
-    $existing_phone = trim($stmt_chk_phone->fetchColumn() ?: '');
-
-    // 2. ถ้ายังไม่มีเบอร์ ค่อยทำการ UPDATE
-    if (empty($existing_phone)) {
-        $stmt_update_phone = $pdo->prepare("UPDATE customers SET phone = :phone WHERE cus_id = :cus_id");
-        $stmt_update_phone->execute([
-            ':phone'  => $cus_phone,
-            ':cus_id' => $cus_id
-        ]);
-    }
-}
-
 try {
     $pdo->beginTransaction();
+
+    if (!empty($cus_phone) && strlen($cus_phone) >= 9) {
+        $stmt_chk_phone = $pdo->prepare("SELECT phone FROM customers WHERE cus_id = :cus_id");
+        $stmt_chk_phone->execute([':cus_id' => $cus_id]);
+        $existing_phone = trim($stmt_chk_phone->fetchColumn() ?: '');
+
+        if (empty($existing_phone)) {
+            $stmt_update_phone = $pdo->prepare("UPDATE customers SET phone = :phone WHERE cus_id = :cus_id");
+            $stmt_update_phone->execute([
+                ':phone'  => $cus_phone,
+                ':cus_id' => $cus_id
+            ]);
+        }
+    }
 
     $is_same_day = $booking_date === date('Y-m-d');
     $planned_staff_ids = $is_same_day
@@ -223,11 +221,11 @@ try {
         }
     }
 
-    $pdo->commit();
-
     if ($is_same_day) {
         autoAssignStaffToBookings($pdo, $booking_date);
     }
+
+    $pdo->commit();
     
     unset($_SESSION['booking']);
 

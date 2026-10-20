@@ -14,13 +14,16 @@ function autoAssignStaffToBookings($pdo, $target_date = null) {
                         COUNT(b.id) AS job_count
                     FROM checkin c
                     LEFT JOIN bookings b ON c.staff_id = b.staff_id 
-                                        AND b.booking_date = :target_date 
+                                        AND b.booking_date = :booking_date
                                         AND b.status IN ('pending', 'confirmed', 'completed')
-                    WHERE DATE(c.checkin_time) = :target_date
+                    WHERE DATE(c.checkin_time) = :checkin_date
                     GROUP BY c.staff_id, c.checkin_time
                     ORDER BY job_count ASC, c.checkin_time ASC";
     $stmt_c = $pdo->prepare($sql_checkin);
-    $stmt_c->execute([':target_date' => $target_date]);
+    $stmt_c->execute([
+        ':booking_date' => $target_date,
+        ':checkin_date' => $target_date
+    ]);
     $checked_in_staffs = $stmt_c->fetchAll(PDO::FETCH_ASSOC);
 
     if (empty($checked_in_staffs)) {

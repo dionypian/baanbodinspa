@@ -270,6 +270,11 @@ if (!empty($booked_service_ids) && $user_id > 0) {
             } else {
                 document.getElementById('saveBookingForm').submit();
             }
+        },
+
+        cancelPhoneEntry() {
+            this.userPhone = '';
+            this.showPhoneModal = false;
         }
       }">
 
@@ -756,7 +761,7 @@ if (!empty($booked_service_ids) && $user_id > 0) {
          style="display: none;">
         
         <div class="bg-[#FDFBF7] w-full max-w-md rounded-3xl p-6 shadow-2xl border border-[#E8E2D5] space-y-4 relative z-10"
-             @click.outside="showPhoneModal = false">
+             @click.outside="cancelPhoneEntry()">
             
             <div class="text-center space-y-2">
                 <div class="w-14 h-14 bg-amber-100 text-amber-900 rounded-full flex items-center justify-center mx-auto text-2xl font-bold shadow-inner">
@@ -777,7 +782,7 @@ if (!empty($booked_service_ids) && $user_id > 0) {
 
             <div class="flex space-x-3 pt-2">
                 <button type="button" 
-                        @click="showPhoneModal = false" 
+                        @click="cancelPhoneEntry()"
                         class="w-1/2 bg-gray-200 text-gray-700 py-3 rounded-xl hover:bg-gray-300 text-sm font-medium transition-colors">
                     ยกเลิก
                 </button>

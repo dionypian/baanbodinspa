@@ -194,7 +194,7 @@
                                         $method = strtolower(trim($qi['payment_method'] ?? ''));
                                         $coupon_code = !empty($qi['coupon_code']) ? trim($qi['coupon_code']) : '';
                                     ?>
-                                        <div class="queue-booking overflow-hidden text-left" data-booking-time="<?= htmlspecialchars($qi['booking_time'], ENT_QUOTES, 'UTF-8') ?>">
+                                        <div class="queue-booking overflow-hidden text-left <?= ($qi['status'] ?? '') === 'completed' ? 'bg-emerald-100 rounded-lg p-2' : '' ?>" data-booking-time="<?= htmlspecialchars($qi['booking_time'], ENT_QUOTES, 'UTF-8') ?>">
                                             <!-- เวลาเริ่ม - เสร็จ -->
                                             <div class="font-bold text-[18px] text-[#382214] flex justify-between items-center gap-1">
                                                 <span class="whitespace-nowrap"><?= $start_t ?> - <?= $end_t ?></span>

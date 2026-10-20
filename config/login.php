@@ -7,8 +7,12 @@ require_once 'db-connect.php';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $identifier = trim($_POST['identifier'] ?? '');
-    $password = trim($_POST['password'] ?? '');
+    $identifier = isset($_POST['identifier']) && is_string($_POST['identifier'])
+        ? trim($_POST['identifier'])
+        : '';
+    $password = isset($_POST['password']) && is_string($_POST['password'])
+        ? $_POST['password']
+        : '';
 
     if (!empty($identifier) && !empty($password)) {
         try {
@@ -22,7 +26,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($admin) {
                 // ตรวจสอบรหัสผ่าน (รองรับทั้ง password_hash และ ข้อความธรรมดา)
-                $isPasswordCorrect = password_verify($password, $admin['password']) || ($password === $admin['password']);
+                $adminPassword = $admin['password'] ?? null;
+                $isPasswordCorrect = is_string($adminPassword)
+                    && (password_verify($password, $adminPassword) || $password === $adminPassword);
 
                 if ($isPasswordCorrect) {
                     $_SESSION['user_id']  = $admin['admin_id'];
@@ -36,18 +42,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // 2. ถ้าไม่ใช่แอดมิน ให้ตรวจสอบในตาราง customers
-            $stmtUser = $pdo->prepare("SELECT * FROM customers WHERE email = :id1 OR username = :id2 LIMIT 1");
+            $stmtUser = $pdo->prepare("SELECT * FROM customers WHERE email = :email OR username = :username OR phone = :phone LIMIT 1");
             $stmtUser->execute([
-                ':id1' => $identifier,
-                ':id2' => $identifier
+                ':email' => $identifier,
+                ':username' => $identifier,
+                ':phone' => $identifier
             ]);
             $user = $stmtUser->fetch(PDO::FETCH_ASSOC);
 
             if ($user) {
-                $isUserPasswordCorrect = password_verify($password, $user['password']) || ($password === $user['password']);
+                $userPassword = $user['password'] ?? null;
+                $isUserPasswordCorrect = is_string($userPassword)
+                    && (password_verify($password, $userPassword) || $password === $userPassword);
 
                 if ($isUserPasswordCorrect) {
-                    $_SESSION['user_id']  = $user['id'] ?? $user['customer_id'];
+                    $_SESSION['user_id']  = $user['cus_id'];
                     $_SESSION['username'] = $user['username'] ?? $user['email'];
                     $_SESSION['role']     = 'user';
 
@@ -57,13 +66,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // ถ้ารหัสผ่านไม่ถูกต้อง หรือไม่พบข้อมูลในระบบ
-            $error = 'ชื่อผู้ใช้/อีเมล หรือรหัสผ่านไม่ถูกต้อง';
+            $error = 'ชื่อผู้ใช้ เบอร์โทรศัพท์ หรือรหัสผ่านไม่ถูกต้อง';
 
         } catch (PDOException $e) {
-            $error = 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล: ' . $e->getMessage();
+            $error = 'ไม่สามารถเข้าสู่ระบบได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง';
         }
     } else {
-        $error = 'กรุณากรอกชื่อผู้ใช้/อีเมล และรหัสผ่าน';
+        $error = 'กรุณากรอกชื่อผู้ใช้หรือเบอร์โทรศัพท์ และรหัสผ่าน';
     }
 }
 
