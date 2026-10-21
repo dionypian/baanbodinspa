@@ -99,7 +99,7 @@ try {
         )
     ");
 
-    // ตัวแปรเก็บ Pool ของบริการที่จอง เพื่อจับคู่กับคูปองแบบ 1 ต่อ 1
+    // ตัวแปรเก็บ Pool ของบริการที่จอง เพื่อจับคู่กับคูปอง
     $all_booked_service_pool = [];
 
     // 2. วนลูปบันทึกตามรายบุคคล และคำนวณเวลาแบบบวกสะสมต่อกัน
@@ -117,9 +117,11 @@ try {
         // วนลูปตามจำนวนบริการที่เลือกของลูกค้ารายนี้
         foreach ($service_ids as $service_id) {
             // ดึงระยะเวลา (duration) ของบริการนี้เพื่อนำไปบวกเวลารอบถัดไป
-            $stmt_dur = $pdo->prepare("SELECT duration FROM allservices WHERE id = :id");
+            $stmt_dur = $pdo->prepare("SELECT duration, coupon_id FROM allservices WHERE id = :id");
             $stmt_dur->execute([':id' => $service_id]);
-            $service_duration = $stmt_dur->fetchColumn() ?: 60;
+            $srv_info = $stmt_dur->fetch(PDO::FETCH_ASSOC);
+            $service_duration = $srv_info['duration'] ?: 60;
+            $service_coupon_id = $srv_info['coupon_id'] ?: null; // 🟢 ดึง coupon_id ของบริการ
 
             // 2.1 INSERT ลงตาราง bookings ด้วยเวลาของรอบนั้นๆ ($current_service_time)
             $stmt_booking->execute([
@@ -141,14 +143,20 @@ try {
                 ':service_id' => (int)$service_id
             ]);
 
-            // เก็บข้อมูลลง Service Pool ไว้สำหรับตรวจสอบและตัดคูปอง
-            $all_booked_service_pool[] = [
-                'service_id' => (int)$service_id,
-                'booking_id' => $booking_id,
-                'is_covered' => false
-            ];
+            // 🟢 2.3 คำนวณจำนวนโควตาคูปองที่ยอมให้ใช้ได้ตามระยะเวลา (Duration)
+            // 60 นาที = 1 สิทธิ์ / 90 นาที = 1 สิทธิ์ / 120 นาที = 2 สิทธิ์
+            $allowed_coupon_slots = max(1, (int)floor($service_duration / 60));
 
-            // 🟢 คำนวณเวลาเริ่มต้นสำหรับบริการถัดไป (นำเวลาปัจจุบัน + duration นาที)
+            for ($slot = 0; $slot < $allowed_coupon_slots; $slot++) {
+                $all_booked_service_pool[] = [
+                    'service_id' => (int)$service_id,
+                    'coupon_id'  => (int)$service_coupon_id, // 🟢 เพิ่ม coupon_id เข้าไปใน Pool
+                    'booking_id' => $booking_id,
+                    'is_covered' => false
+                ];
+            }
+
+            // คำนวณเวลาเริ่มต้นสำหรับบริการถัดไป (นำเวลาปัจจุบัน + duration นาที)
             $current_timestamp = strtotime("$booking_date $current_service_time");
             $next_timestamp    = $current_timestamp + ($service_duration * 60);
             $current_service_time = date('H:i:s', $next_timestamp);
@@ -162,39 +170,39 @@ try {
         foreach ($use_coupon_ids as $use_coupon_id) {
             // 3.1 ล็อกแถวข้อมูลคูปองทีละใบ (FOR UPDATE) เพื่อกัน Race Condition
             $stmt_cp = $pdo->prepare("
-                SELECT id, coupon_code, service_id, used 
-                FROM cus_coupon 
-                WHERE id = :id AND cus_id = :cus_id 
-                FOR UPDATE
-            ");
-            $stmt_cp->execute([':id' => $use_coupon_id, ':cus_id' => $cus_id]);
-            $cp_data = $stmt_cp->fetch(PDO::FETCH_ASSOC);
+        SELECT id, coupon_code, coupon_id, service_id, used 
+        FROM cus_coupon 
+        WHERE id = :id AND cus_id = :cus_id 
+        FOR UPDATE
+        ");
+        $stmt_cp->execute([':id' => $use_coupon_id, ':cus_id' => $cus_id]);
+        $cp_data = $stmt_cp->fetch(PDO::FETCH_ASSOC);
 
-            if (!$cp_data) {
-                throw new Exception("ไม่พบข้อมูลคูปองบางรายการ หรือไม่ใช่คูปองของคุณ");
+        if (!$cp_data) {
+            throw new Exception("ไม่พบข้อมูลคูปองบางรายการ หรือไม่ใช่คูปองของคุณ");
+        }
+        if ((int)$cp_data['used'] === 1) {
+            throw new Exception("คูปองรหัส [" . $cp_data['coupon_code'] . "] ถูกใช้งานไปแล้ว");
+        }
+
+        $cp_coupon_id = (int)$cp_data['coupon_id']; // 🟢 ใช้ coupon_id แทน service_id
+        $matched_key = null;
+
+        // 🟢 3.2 ค้นหาบริการใน Pool ที่ coupon_id ตรงกัน
+        foreach ($all_booked_service_pool as $key => $pool_item) {
+            if (!$pool_item['is_covered'] && $pool_item['coupon_id'] === $cp_coupon_id) {
+                $matched_key = $key;
+                break; 
             }
-            if ((int)$cp_data['used'] === 1) {
-                throw new Exception("คูปองรหัส [" . $cp_data['coupon_code'] . "] ถูกใช้งานไปแล้ว");
-            }
+        }
 
-            $cp_service_id = (int)$cp_data['service_id'];
-            $matched_key = null;
+        if ($matched_key === null) {
+            throw new CouponSelectionException(
+                "คูปองรหัส [" . $cp_data['coupon_code'] . "] เลือกเกินจำนวนสิทธิ์บริการประเภทนี้ที่คุณจอง"
+            );
+        }
 
-            // 3.2 ค้นหาบริการใน Pool ที่ยังไม่ได้ใช้คูปอง และมี service_id ตรงกัน
-            foreach ($all_booked_service_pool as $key => $pool_item) {
-                if (!$pool_item['is_covered'] && $pool_item['service_id'] === $cp_service_id) {
-                    $matched_key = $key;
-                    break; 
-                }
-            }
-
-            if ($matched_key === null) {
-                throw new CouponSelectionException(
-                    "คูปองรหัส [" . $cp_data['coupon_code'] . "] เลือกเกินจำนวนบริการประเภทนี้ที่คุณจอง"
-                );
-            }
-
-            // ทำเครื่องหมายว่ารายการบริการนี้ใช้สิทธิ์คูปองเรียบร้อยแล้ว
+            // ทำเครื่องหมายว่าสิทธิ์รายการบริการนี้ถูกคูปองใบนี้นำไปใช้แล้ว
             $all_booked_service_pool[$matched_key]['is_covered'] = true;
             $matched_booking_id = $all_booked_service_pool[$matched_key]['booking_id'];
 

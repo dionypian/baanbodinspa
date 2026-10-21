@@ -187,7 +187,7 @@
                     </h4>
 
                     <!-- ลิงก์อ่านต่อ -->
-                    <a href="news-detail.php?id=1"
+                    <a href="new1.php"
                         class="text-ml font-bold text-[#A67C52] underline underline-offset-4 hover:text-[#8C6239] transition-colors mt-auto inline-block">
                         อ่านต่อ
                     </a>
@@ -206,7 +206,7 @@
                         <h4 class="text-lg font-bold text-[#382214] transition-colors leading-snug mb-2 line-clamp-2">
                             โปรโมชั่นเล่มคูปอง
                         </h4>
-                        <a href="news-detail.php?id=1"
+                        <a href="promo1.php"
                             class="text-ml font-bold text-[#A67C52] underline underline-offset-4 hover:text-[#8C6239] transition-colors mt-auto inline-block">
                             อ่านต่อ
                         </a>
@@ -225,7 +225,7 @@
                         <h4 class="text-lg font-bold text-[#382214] transition-colors leading-snug mb-2 line-clamp-2">
                             โปรโมชั่นสุดพิเศษสำหรับทองคำ
                         </h4>
-                        <a href="news-detail.php?id=1"
+                        <a href="promo2.php"
                             class="text-ml font-bold text-[#A67C52] underline underline-offset-4 hover:text-[#8C6239] transition-colors mt-auto inline-block">
                             อ่านต่อ
                         </a>

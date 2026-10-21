@@ -77,7 +77,7 @@ $massage_menu = [
         "title_th" => "นวดไทยประคบ",
         "start_price" => "700 ฿",
         "duration" => "120 นาที",
-        "image" => "image/herom.png",
+        "image" => "image/thaicompress.jpg",
         "prices" => [
             ["time" => "120 นาที", "price" => "700 ฿"]
         ],
@@ -89,7 +89,7 @@ $massage_menu = [
         "title_th" => "นวดสปอร์ต",
         "start_price" => "700 ฿",
         "duration" => "60 นาที",
-        "image" => "image/herom.png",
+        "image" => "image/sportmassage.jpg",
         "prices" => [
             ["time" => "60 นาที", "price" => "700 ฿"],
             ["time" => "90 นาที", "price" => "1050 ฿"],
@@ -115,7 +115,7 @@ $course_menu = [
         'id' => 'course-2',
         'title_en' => 'sport massage<br>with ice bath',
         'title_th' => 'นวดสปอร์ต แช่น้ำแข็ง',
-        'image' => 'image/herom.png',
+        'image' => 'image/icebath.jpg',
         'start_price' => '890 ฿',
         'duration' => '90 นาที',
         'prices' => [

@@ -191,24 +191,45 @@ foreach ($session_items as $item) {
 }
 $booked_service_ids = array_unique($booked_service_ids);
 
+// สร้างตัวแปรเก็บระยะเวลา (duration) ของบริการที่ถูกจองแยกตาม service_id
+$booked_service_durations = [];
+foreach ($all_services as $s) {
+    if (in_array((int)$s['id'], $booked_service_ids)) {
+        $booked_service_durations[$s['id']] = (int)$s['duration'];
+    }
+}
+
+// ดึง coupon_id ทั้งหมดของบริการที่ลูกค้าเลือกรอบนี้ (รวมทั้ง 60, 90, 120 นาที)
+$booked_coupon_ids = [];
+foreach ($session_items as $item) {
+    if (!empty($item['service_ids']) && is_array($item['service_ids'])) {
+        foreach ($item['service_ids'] as $s_id) {
+            $service_id = (int)$s_id;
+            if (isset($services_by_id[$service_id]) && !empty($services_by_id[$service_id]['coupon_id'])) {
+                $booked_coupon_ids[] = (int)$services_by_id[$service_id]['coupon_id'];
+            }
+        }
+    }
+}
+$booked_coupon_ids = array_unique($booked_coupon_ids);
+
 $my_coupons = [];
-if (!empty($booked_service_ids) && $user_id > 0) {
-    // สร้างตัวแปร ? ตามจำนวน service_id ที่จอง
-    $in_clause = implode(',', array_fill(0, count($booked_service_ids), '?'));
+if (!empty($booked_coupon_ids) && $user_id > 0) {
+    // 🟢 ดึงคูปองที่ผูกกับ coupon_id ของกลุ่มบริการนี้ (ครอบคลุมทั้ง 60, 90, 120 นาที)
+    $in_clause = implode(',', array_fill(0, count($booked_coupon_ids), '?'));
     
     $sql_coupons = "
-        SELECT cc.id, cc.coupon_code, cc.service_id, s.name as service_name, s.duration 
+        SELECT cc.id, cc.coupon_code, cc.coupon_id, cc.service_id, c.coupon_name
         FROM cus_coupon cc
-        LEFT JOIN allservices s ON cc.service_id = s.id
-        WHERE cc.cus_id = ? AND cc.used = 0 AND cc.service_id IN ($in_clause)
+        INNER JOIN coupon c ON cc.coupon_id = c.coupon_id
+        WHERE cc.cus_id = ? AND cc.used = 0 AND cc.coupon_id IN ($in_clause)
     ";
     
     $stmt_coupons = $pdo->prepare($sql_coupons);
-    $params = array_merge([$user_id], $booked_service_ids);
+    $params = array_merge([$user_id], $booked_coupon_ids);
     $stmt_coupons->execute($params);
     $my_coupons = $stmt_coupons->fetchAll(PDO::FETCH_ASSOC);
 }
-
 ?>
 
 <!DOCTYPE html>
@@ -569,8 +590,23 @@ if (!empty($booked_service_ids) && $user_id > 0) {
                                 <div class="space-y-1.5 max-h-40 overflow-y-auto p-1">
                                     <?php foreach ($my_coupons as $cp): ?>
                                         <label class="coupon-option flex items-center space-x-2 text-xs text-[#382214] cursor-pointer bg-white p-2 rounded-lg border border-gray-200 hover:bg-amber-100/50">
-                                            <input type="checkbox" name="use_coupon_ids[]" value="<?= (int)$cp['id'] ?>" data-service-id="<?= (int)$cp['service_id'] ?>" form="saveBookingForm" class="coupon-checkbox w-4 h-4 text-[#382214] rounded focus:ring-[#382214]">
-                                            <span>คูปอง [<b><?= htmlspecialchars($cp['coupon_code']) ?></b>] - <?= htmlspecialchars($cp['service_name'] ?? 'คูปองบริการ' ) ?> <?= htmlspecialchars($cp['duration']) ?> นาที</span>
+                                            <?php 
+                                                // หา service_id ที่ลูกค้าเลือกจองในรอบนี้ ซึ่งผูกกับ coupon_id ของคูปองใบนี้
+                                                $matched_booked_service_id = $cp['service_id']; 
+                                                foreach ($all_services as $srv) {
+                                                    if (in_array((int)$srv['id'], $booked_service_ids) && (int)$srv['coupon_id'] === (int)$cp['coupon_id']) {
+                                                        $matched_booked_service_id = $srv['id']; // ได้ ID ของ นวดไทย 120 นาที (เช่น ID = 3)
+                                                        break;
+                                                    }
+                                                }
+                                            ?>
+                                            <input type="checkbox" 
+                                                name="use_coupon_ids[]" 
+                                                value="<?= (int)$cp['id'] ?>" 
+                                                data-service-id="<?= (int)$matched_booked_service_id ?>" 
+                                                form="saveBookingForm" 
+                                                class="coupon-checkbox w-4 h-4 text-[#382214] rounded focus:ring-[#382214]">
+                                            <span>คูปอง [<b><?= htmlspecialchars($cp['coupon_code']) ?></b>] - <?= htmlspecialchars($cp['service_name'] ?? 'คูปองบริการ' ) ?></span>
                                         </label>
                                     <?php endforeach; ?>
                                 </div>
@@ -797,14 +833,20 @@ if (!empty($booked_service_ids) && $user_id > 0) {
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const couponServiceLimits = <?= json_encode(
-                $booked_service_counts,
+            // 🟢 1. ดึงข้อมูล duration ของบริการส่งเข้ามาจาก PHP
+            const serviceDurations = <?= json_encode(
+                $booked_service_durations,
                 JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-            ) ?>;
+            ) ?> || {};
+
             const couponCheckboxes = Array.from(document.querySelectorAll('.coupon-checkbox'));
+            const finalPriceElement = document.getElementById('final-total-price');
+            const baseTotalPrice = <?= (float)($total_price ?? 0) ?>;
 
             function updateCouponAvailability() {
                 const selectedCounts = {};
+
+                // 1. นับจำนวนคูปองที่ถูกเลือกติ๊กแยกตาม service_id
                 couponCheckboxes.forEach(checkbox => {
                     if (checkbox.checked) {
                         const serviceId = checkbox.dataset.serviceId;
@@ -812,19 +854,22 @@ if (!empty($booked_service_ids) && $user_id > 0) {
                     }
                 });
 
+                // 2. ตรวจสอบลิมิตตามเวลา Duration ของบริการนั้นๆ
                 couponCheckboxes.forEach(checkbox => {
                     const serviceId = checkbox.dataset.serviceId;
-                    const limit = Number(couponServiceLimits[serviceId] || 0);
-                    const atLimit = (selectedCounts[serviceId] || 0) >= limit;
+                    const duration = Number(serviceDurations[serviceId] || 60);
+
+                    // คำนวณลิมิต: 120 นาที -> Math.floor(120 / 60) = อนุญาต 2 ใบ
+                    const maxCouponsAllowed = Math.max(1, Math.floor(duration / 60));
+
+                    const atLimit = (selectedCounts[serviceId] || 0) >= maxCouponsAllowed;
                     checkbox.disabled = !checkbox.checked && atLimit;
-                    checkbox.closest('.coupon-option').classList.toggle(
-                        'opacity-50',
-                        checkbox.disabled
-                    );
-                    checkbox.closest('.coupon-option').classList.toggle(
-                        'cursor-not-allowed',
-                        checkbox.disabled
-                    );
+
+                    const optionContainer = checkbox.closest('.coupon-option');
+                    if (optionContainer) {
+                        optionContainer.classList.toggle('opacity-50', checkbox.disabled);
+                        optionContainer.classList.toggle('cursor-not-allowed', checkbox.disabled);
+                    }
                 });
             }
 
@@ -833,6 +878,7 @@ if (!empty($booked_service_ids) && $user_id > 0) {
             });
             updateCouponAvailability();
 
+            // Flatpickr และการเช็กพนักงานซ้ำ (โค้ดเดิม)
             flatpickr("#booking_date", {
                 locale: "th",
                 dateFormat: "Y-m-d",

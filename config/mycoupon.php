@@ -83,17 +83,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $total_price = $target_coupon['price'];
             $total_leaves = intval($target_coupon['total_leaves']);
 
-            // ดึง service_id จากตาราง allservices ที่ผูกกับ coupon_id นี้โดยเฉพาะ
-            $sql_s = "SELECT id FROM allservices WHERE coupon_id = :coupon_id LIMIT 1";
+            // 🟢 ดึง service_id หลักของบริการที่ผูกกับ coupon_id นี้
+            $sql_s = "SELECT id FROM allservices WHERE coupon_id = :coupon_id ORDER BY duration ASC, id ASC LIMIT 1";
             $stmt_s = $pdo->prepare($sql_s);
             $stmt_s->execute([':coupon_id' => $coupon_id]);
-            $service_id = $stmt_s->fetchColumn(); // จะได้ค่า id บริการจากฐานข้อมูลโดยอัตโนมัติ (เช่น 1)
+            $service_id = $stmt_s->fetchColumn(); 
 
             // 2. บันทึกลงตาราง coupon_book
             $sql_book = "INSERT INTO coupon_book (cus_id, coupon_id, total_price, payment_method, slip_image, sold_date) 
                          VALUES (:cus_id, :coupon_id, :total_price, :payment_method, :slip_image, NOW())";
-            $stmt_book = $pdo->prepare($sql_book);
-            $stmt_book->execute([
+            $stmt_book = $pdo->prepare($sql_book);$stmt_book->execute([
                 ':cus_id' => $cus_id,
                 ':coupon_id' => $coupon_id,
                 ':total_price' => $total_price,
@@ -101,21 +100,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 ':slip_image' => $slip_filename
             ]);
 
-            $coupon_book_id = $pdo->lastInsertId();
+            $coupon_book_id =$pdo->lastInsertId();
 
-            // 3. สร้างใบคูปองลงตาราง cus_coupon โดยใช้ service_id ที่ดึงได้จากฐานข้อมูล
+            // 3. สร้างใบคูปองลงตาราง cus_coupon โดยใช้ service_id ที่ดึงได้
             $sql_cus_coupon = "INSERT INTO cus_coupon (coupon_book_id, cus_id, coupon_id, service_id, coupon_code, used) 
                                VALUES (:coupon_book_id, :cus_id, :coupon_id, :service_id, :coupon_code, 0)";
             $stmt_cc = $pdo->prepare($sql_cus_coupon);
 
-            for ($i = 0; $i < $total_leaves; $i++) {
-                $coupon_code = generateNextCouponCode($pdo);
-                
-                $stmt_cc->execute([
+            for ($i = 0; $i <$total_leaves; $i++) {$coupon_code = generateNextCouponCode($pdo);$stmt_cc->execute([
                     ':coupon_book_id' => $coupon_book_id,
                     ':cus_id' => $cus_id,
                     ':coupon_id' => $coupon_id,
-                    ':service_id' => $service_id ?: null, // ใช้ค่าที่ดึงได้จากตาราง allservices
+                    ':service_id' => $service_id ?: null,
                     ':coupon_code' => $coupon_code
                 ]);
             }
@@ -126,9 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $_SESSION['flash_type'] = "success";
 
         } catch (Exception $e) {
-            $pdo->rollBack();
-            $_SESSION['flash_message'] = 'เกิดข้อผิดพลาดในการทำรายการ: ' . $e->getMessage();
-            $_SESSION['flash_type'] = 'error';
+            $pdo->rollBack();$_SESSION['flash_message'] = 'เกิดข้อผิดพลาดในการทำรายการ: ' . $e->getMessage();$_SESSION['flash_type'] = 'error';
         }
     } else {
         $_SESSION['flash_message'] = 'ไม่พบข้อมูลเล่มคูปองที่เลือก';
@@ -164,7 +158,7 @@ $stmt_u->execute([':cus_id' =>$cus_id]);
 $coupons =$stmt_u->fetchAll(PDO::FETCH_ASSOC);
 
 $coupon_books = [];
-foreach ($coupons as $coupon) {
+foreach ($coupons as$coupon) {
     $book_key = !empty($coupon['coupon_book_id'])
         ? 'book-' . $coupon['coupon_book_id']
         : 'legacy-' . $coupon['coupon_id'];
@@ -178,18 +172,19 @@ foreach ($coupons as $coupon) {
         ];
     }
 
-    $coupon_books[$book_key]['coupons'][] = $coupon;
+    $coupon_books[$book_key]['coupons'][] =$coupon;
     if ((int)$coupon['used'] === 1) {
         $coupon_books[$book_key]['used_count']++;
     }
 }
 
 // ----------------------------------------------------
-// 2. ดึงรายการเล่มคูปองที่มีขายจากตาราง coupon (สำหรับ Pop-up)
+// 2. ดึงรายการเล่มคูปองที่มีขายจากตาราง coupon (พร้อม JOIN ชื่อบริการ)
 // ----------------------------------------------------
 $sql_available_coupons = "
-    SELECT c.* 
+    SELECT c.*, s.name AS service_name, s.duration AS service_duration
     FROM coupon c 
+    LEFT JOIN allservices s ON s.coupon_id = c.coupon_id
     GROUP BY c.coupon_id 
     ORDER BY c.price ASC
 ";
@@ -262,7 +257,7 @@ function getCouponBadge($used) {
 
             <!-- รายการคูปองแยกตามเล่ม -->
             <div class="space-y-6">
-                <?php foreach ($coupon_books as $book):
+                <?php foreach ($coupon_books as$book):
                     $total_coupons = count($book['coupons']);
                 ?>
                     <section class="bg-white rounded-3xl shadow-sm border border-[#E8E2D5] p-5 sm:p-6">
@@ -284,7 +279,7 @@ function getCouponBadge($used) {
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <?php foreach ($book['coupons'] as $coupon):
+                            <?php foreach ($book['coupons'] as$coupon):
                                 $is_used = ((int)$coupon['used'] === 1);
                             ?>
                                 <div class="bg-[#FDFBF7] rounded-2xl shadow-sm border border-[#E8E2D5] overflow-hidden flex flex-col justify-between transition-all <?php echo $is_used ? 'opacity-60 grayscale-[30%]' : 'hover:shadow-md'; ?>">
@@ -300,11 +295,9 @@ function getCouponBadge($used) {
                                             <h3 class="text-lg font-bold text-[#382214]">
                                                 <?= htmlspecialchars($coupon['coupon_name']) ?>
                                             </h3>
-                                            <?php if (!empty($coupon['service_name'])): ?>
-                                                <p class="text-sm text-gray-500 mt-1 leading-relaxed">
-                                                    สำหรับบริการ: <strong class="text-[#382214]"><?= htmlspecialchars($coupon['service_name']) ?></strong> (<?= htmlspecialchars((string)$coupon['duration']) ?> นาที)
-                                                </p>
-                                            <?php endif; ?>
+                                            <p class="text-sm text-gray-500 mt-1 leading-relaxed">
+                                                ใช้สิทธิ์สำหรับ: <strong class="text-[#382214]"><?= htmlspecialchars($coupon['coupon_name']) ?></strong> (ครอบคลุมบริการ 60-120 นาที)
+                                            </p>
                                         </div>
                                     </div>
 
@@ -503,4 +496,4 @@ function getCouponBadge($used) {
     </script>
 
 </body>
-</html>
+</html> 
