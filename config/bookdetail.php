@@ -97,7 +97,8 @@ function getStatusBadge($status) {
                             s.duration AS service_duration, 
                             s.price AS service_price,
                             st.nickname AS staff_nickname,
-                            st.name AS staff_name
+                            st.name AS staff_name,
+                            st.gender AS staff_gender
                         FROM bookings b
                         LEFT JOIN allservices s ON b.service_id = s.id
                         LEFT JOIN staffs st ON b.staff_id = st.staff_id
@@ -199,6 +200,12 @@ function getStatusBadge($status) {
                                     <div class="text-xs text-gray-600">
                                         พนักงาน: 
                                         <?php if (!empty($item['staff_nickname'] || !empty($item['staff_name']))): ?>
+                                            <?php $staff_gender = strtolower($item['staff_gender'] ?? ''); ?>
+                                            <?php if ($staff_gender === 'male'): ?>
+                                                <span class="text-blue-600" aria-label="ผู้ชาย" title="ผู้ชาย">♂️</span>
+                                            <?php elseif ($staff_gender === 'female'): ?>
+                                                <span class="text-pink-500" aria-label="ผู้หญิง" title="ผู้หญิง">♀️</span>
+                                            <?php endif; ?>
                                             <span class="font-semibold text-[#382214]">หมอ <?= htmlspecialchars($item['staff_nickname'] ?? $item['staff_name']) ?></span>
                                         <?php else: ?>
                                             <span class="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-medium">⏳ ไม่ระบุ (ทางร้านจะจัดสรรให้)</span>

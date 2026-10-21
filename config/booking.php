@@ -385,7 +385,7 @@ if (!empty($booked_coupon_ids) && $user_id > 0) {
                 }
 
                 // 🟢 Query ดึงพนักงาน โดยเช็คช่วงเวลาซ้อนทับ (Time Overlap) ร่วมกับวันหยุด
-                $sql = "SELECT s.staff_id, s.name, s.nickname 
+                $sql = "SELECT s.staff_id, s.name, s.nickname, s.gender
                         FROM staffs s 
                         WHERE (s.day_off IS NULL OR LOWER(DAYNAME(:booking_date)) != LOWER(s.day_off))
                         {$checkin_filter}
@@ -479,10 +479,14 @@ if (!empty($booked_coupon_ids) && $user_id > 0) {
                                     </template>
 
                                     <?php foreach ($staffs as $staff): ?>
+                                        <?php
+                                            $staff_gender = strtolower($staff['gender'] ?? '');
+                                            $gender_icon = $staff_gender === 'male' ? '♂️ ' : ($staff_gender === 'female' ? '♀️ ' : '');
+                                        ?>
                                         <option value="<?= $staff['staff_id'] ?>"
                                                 :disabled="isStaffSelectedByOther(<?= $staff['staff_id'] ?>, <?= $i ?>) || !isStaffQualified(<?= $staff['staff_id'] ?>, <?= $i ?>)"
                                                 :class="(isStaffSelectedByOther(<?= $staff['staff_id'] ?>, <?= $i ?>) || !isStaffQualified(<?= $staff['staff_id'] ?>, <?= $i ?>)) ? 'text-gray-400 bg-gray-100' : ''"
-                                                x-text="'หมอ <?= htmlspecialchars($staff['nickname'] ?? $staff['name'], ENT_QUOTES) ?>' + (isStaffSelectedByOther(<?= $staff['staff_id'] ?>, <?= $i ?>) ? ' (ถูกเลือกแล้ว)' : (!isStaffQualified(<?= $staff['staff_id'] ?>, <?= $i ?>) ? ' (ไม่มีทักษะบริการนี้)' : ''))">
+                                                x-text="'<?= $gender_icon ?>หมอ <?= htmlspecialchars($staff['nickname'] ?? $staff['name'], ENT_QUOTES) ?>' + (isStaffSelectedByOther(<?= $staff['staff_id'] ?>, <?= $i ?>) ? ' (ถูกเลือกแล้ว)' : (!isStaffQualified(<?= $staff['staff_id'] ?>, <?= $i ?>) ? ' (ไม่มีทักษะบริการนี้)' : ''))">
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
@@ -516,12 +520,14 @@ if (!empty($booked_coupon_ids) && $user_id > 0) {
                     $service_ids = $item['service_ids'] ?? [];
 
                     $staff_name = 'ไม่ระบุ (ให้ทางร้านจัดให้)';
+                    $staff_gender = '';
                     if ($staff_id) {
-                        $stmt_st = $pdo->prepare("SELECT * FROM staffs WHERE staff_id = :id");
+                        $stmt_st = $pdo->prepare("SELECT name, nickname, gender FROM staffs WHERE staff_id = :id");
                         $stmt_st->execute([':id' => $staff_id]);
                         $staff = $stmt_st->fetch(PDO::FETCH_ASSOC);
                         if ($staff) {
                             $staff_name = 'หมอ ' . ($staff['nickname'] ?? $staff['name']);
+                            $staff_gender = strtolower($staff['gender'] ?? '');
                         }
                     }
 
@@ -547,7 +553,8 @@ if (!empty($booked_coupon_ids) && $user_id > 0) {
                         'services'       => $person_services,
                         'total_duration' => $person_total_duration,
                         'total_price'    => $person_total_price,
-                        'staff'          => $staff_name
+                        'staff'          => $staff_name,
+                        'staff_gender'   => $staff_gender
                     ];
                 }
             ?>
@@ -573,7 +580,14 @@ if (!empty($booked_coupon_ids) && $user_id > 0) {
                                         <?php endforeach; ?>
                                         <div class="text-sm text-amber-800 pt-1 font-medium">เวลานวดรวม: <?= $detail['total_duration'] ?> นาที</div>
                                     </div>
-                                    <div class="text-gray-600 pt-1 border-t">พนักงาน: <span class="font-semibold text-[#382214]"><?= htmlspecialchars($detail['staff']) ?></span></div>
+                                    <div class="text-gray-600 pt-1 border-t">พนักงาน:
+                                        <?php if ($detail['staff_gender'] === 'male'): ?>
+                                            <span class="text-blue-600" aria-label="ผู้ชาย" title="ผู้ชาย">♂</span>
+                                        <?php elseif ($detail['staff_gender'] === 'female'): ?>
+                                            <span class="text-pink-500" aria-label="ผู้หญิง" title="ผู้หญิง">♀</span>
+                                        <?php endif; ?>
+                                        <span class="font-semibold text-[#382214]"><?= htmlspecialchars($detail['staff']) ?></span>
+                                    </div>
                                 </div>
                             <?php endforeach; ?>
                         </div>
