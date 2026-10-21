@@ -145,7 +145,7 @@ function isStaffAvailable($pdo, $staff_id, $booking_date, $booking_time, $durati
             JOIN allservices srv ON bi.service_id = srv.id
             WHERE b.staff_id = :staff_id
               AND b.booking_date = :b_date
-              AND b.status IN ('pending', 'confirmed')
+              AND b.status IN ('pending', 'confirmed', 'completed')
               AND b.id != :current_b_id
               AND (
                   TIMESTAMP(b.booking_date, b.booking_time) < :end_dt

@@ -63,25 +63,6 @@
         ตารางการจองคิววันที่ <?= date('d/m/Y', strtotime($summary_date ?? date('Y-m-d'))) ?>
     </div>
 
-    <?php 
-    $max_rounds = 0;
-    if (!empty($summary_staffs)) {
-        foreach ($summary_staffs as $st) {
-            $st_id = $st['staff_id'];
-            $q_list = $staff_queues[$st_id] ?? [];
-            
-            $count = count($q_list);
-            if ($count > $max_rounds) {
-                $max_rounds = $count;
-            }
-        }
-    }
-
-    if ($max_rounds === 0) {
-        $max_rounds = 1;
-    }
-    ?>
-
     <!-- 2. ตารางสรุปตารางคิวและรายรับ -->
     <div class="bg-white shadow-sm border border-[#382214] overflow-x-auto">
         <table class="w-full text-center border-collapse border border-[#382214] text-base md:text-base">
@@ -91,10 +72,7 @@
                     <th class="border border-gray-400 p-2.5 w-28">ชื่อหมอ</th>
                     <th class="border border-gray-400 p-2.5 w-28">เวลาเข้างาน</th>
                     
-                    <!-- แสดงหัวตารางรอบที่ 1 ถึงรอบสูงสุดจริง Dynamic -->
-                    <?php for ($r = 1; $r <= $max_rounds; $r++): ?>
-                        <th class="border border-gray-400 p-2.5 min-w-[150px]">รอบที่ <?= $r ?></th>
-                    <?php endfor; ?>
+                    <th class="border border-gray-400 p-2.5" colspan="4">คิวจอง</th>
                     
                     <!-- สรุปรายรับแยกตามช่องทาง -->
                     <th class="border border-gray-400 p-0" colspan="4">
@@ -177,12 +155,15 @@
                             <?php endif; ?>
                         </td>
 
-                        <!-- แสดงคิวรอบต่างๆ -->
-                        <?php for ($i = 0; $i < $max_rounds; $i++): ?>
-                            <td class="queue-round-cell border border-gray-400 p-1.5 align-top">
-                                <?php if (isset($q_list[$i])): 
-                                        $qi = $q_list[$i];
-                                        
+                        <!-- แสดงคิวรอบต่างๆ แถวละ 4 รอบ -->
+                        <td class="border border-gray-400 p-0 align-top" colspan="4">
+                            <div class="grid grid-cols-4">
+                                <?php foreach (array_values($q_list) as $i => $qi): ?>
+                                    <div class="min-w-[150px] border-r border-b border-gray-300 p-1.5 text-left">
+                                        <div class="mb-1 border-b border-gray-300 pb-1 text-center text-sm font-bold text-[#382214]">
+                                            รอบที่ <?= $i + 1 ?>
+                                        </div>
+                                        <?php
                                         // 1. คำนวณเวลาเริ่ม - เวลาเสร็จ
                                         $start_t  = date('H:i', strtotime($qi['booking_time']));
                                         $duration = (int)($qi['total_duration'] ?? $qi['duration'] ?? 60);
@@ -193,7 +174,7 @@
                                         $price        = (float)($qi['total_price'] ?? $qi['price'] ?? 0);
                                         $method = strtolower(trim($qi['payment_method'] ?? ''));
                                         $coupon_code = !empty($qi['coupon_code']) ? trim($qi['coupon_code']) : '';
-                                    ?>
+                                        ?>
                                         <div class="queue-booking overflow-hidden text-left <?= ($qi['status'] ?? '') === 'completed' ? 'bg-emerald-100 rounded-lg p-2' : '' ?>" data-booking-time="<?= htmlspecialchars($qi['booking_time'], ENT_QUOTES, 'UTF-8') ?>">
                                             <!-- เวลาเริ่ม - เสร็จ -->
                                             <div class="font-bold text-[18px] text-[#382214] flex justify-between items-center gap-1">
@@ -214,9 +195,10 @@
                                                 </div>
                                             </div>
                                         </div>
-                                    <?php endif; ?>
-                            </td>
-                        <?php endfor; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </td>
 
                         <!-- รายรับ -->
                         <td class="border border-gray-400 p-2 text-right w-24 font-medium"><?= number_format($cash) ?></td>
@@ -232,7 +214,7 @@
                     else:
                     ?>
                     <tr>
-                        <td colspan="<?= 3 + $max_rounds + 5 ?>" class="p-6 text-center text-gray-500 font-bold">
+                        <td colspan="12" class="p-6 text-center text-gray-500 font-bold">
                             ยังไม่มีคิวจองหรือพนักงานเช็กอินในวันที่ <?= date('d/m/Y', strtotime($summary_date ?? date('Y-m-d'))) ?>
                         </td>
                     </tr>
@@ -241,7 +223,7 @@
 
             <tfoot>
                 <tr class="bg-gray-100 font-bold border-t border-gray-400 text-gray-800">
-                    <td colspan="<?= 3 + $max_rounds ?>" class="border border-gray-400 p-2.5 text-center">รวม</td>
+                    <td colspan="7" class="border border-gray-400 p-2.5 text-center">รวม</td>
                     <td class="border border-gray-400 p-2 text-right text-emerald-700"><?= number_format($grand_cash) ?></td>
                     <td class="border border-gray-400 p-2 text-right text-emerald-700"><?= number_format($grand_transfer) ?></td>
                     <td class="border border-gray-400 p-2 text-right text-emerald-700"><?= number_format($grand_credit) ?></td>

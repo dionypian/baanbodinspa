@@ -90,6 +90,7 @@ $conn_srv->close();
                     <tr>
                         <th class="p-4">ลำดับ</th>
                         <th class="p-4">ชื่อเล่น</th>
+                        <th class="p-4">Username</th>
                         <th class="p-4">เพศ</th>
                         <th class="p-4">วันเกิด</th>
                         <th class="p-4">วันหยุด</th>
@@ -109,14 +110,13 @@ $conn_srv->close();
                         $i = 1;
                         while ($row = $result->fetch_assoc()):
                             $gender_text = "-";
-                            if ($row['gender'] == 'male')
-                                $gender_text = "ชาย";
-                            if ($row['gender'] == 'female')
-                                $gender_text = "หญิง";
+                            if ($row['gender'] == 'male') $gender_text = "ชาย";
+                            if ($row['gender'] == 'female') $gender_text = "หญิง";
                             ?>
                             <tr class="hover:bg-gray-50">
                                 <td class="p-4"><?= $i++ ?></td>
                                 <td class="p-4"><?= htmlspecialchars($row['nickname'] ?: '-') ?></td>
+                                <td class="p-4"><span class="bg-gray-100 text-gray-700 font-mono text-sm px-2 py-1 rounded"><?= htmlspecialchars($row['username'] ?? '-') ?></span></td>
                                 <td class="p-4"><?= $gender_text ?></td>
                                 <td class="p-4"><?= htmlspecialchars($row['birthdate'] ?: '-') ?></td>
                                 <td class="p-4"><?= htmlspecialchars($row['day_off'] ?: '-') ?></td>
@@ -135,12 +135,12 @@ $conn_srv->close();
                                         บริการ
                                     </button>
 
-
                                     <button
                                         type="button"
                                         data-id="<?= $row['staff_id'] ?>"
                                         data-name="<?= htmlspecialchars($row['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
                                         data-nickname="<?= htmlspecialchars($row['nickname'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                        data-username="<?= htmlspecialchars($row['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
                                         data-phone="<?= htmlspecialchars($row['phone'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
                                         data-gender="<?= htmlspecialchars($row['gender'] ?? 'male', ENT_QUOTES, 'UTF-8') ?>"
                                         data-birthdate="<?= htmlspecialchars($row['birthdate'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
@@ -165,7 +165,7 @@ $conn_srv->close();
                     else:
                         ?>
                         <tr>
-                            <td colspan="7" class="p-4 text-center text-gray-400">ไม่มีข้อมูลพนักงาน</td>
+                            <td colspan="8" class="p-4 text-center text-gray-400">ไม่มีข้อมูลพนักงาน</td>
                         </tr>
                         <?php
                     endif;
@@ -183,15 +183,13 @@ $conn_srv->close();
         style="display: none;"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
     >
-                    
         <div class="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]" @click.outside="openSkillsModal = false">
-                        
-            <div class="p-5 bg-white text-[#382214] flex justify-between items-center">
+            <div class="p-5 bg-white text-[#382214] flex justify-between items-center border-b">
                 <div>
                     <h3 class="font-bold text-lg">จัดการบริการที่ทำได้</h3>
-                    <p class="text-sm text-[#382214]">พนักงาน: หมอ <span class="font-bold" x-text="currentStaffName"></span></p>
+                    <p class="text-sm text-gray-600">พนักงาน: หมอ <span class="font-bold text-[#382214]" x-text="currentStaffName"></span></p>
                 </div>
-                <button type="button" @click="openSkillsModal = false" class="text-white hover:text-gray-300 font-bold text-xl">✕</button>
+                <button type="button" @click="openSkillsModal = false" class="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
             </div>
 
             <form action="admin-staffservices.php" method="POST" class="flex flex-col flex-1 overflow-hidden">
@@ -242,8 +240,9 @@ $conn_srv->close();
         </div>
     </div>
 
+    <!-- MODAL POPUP เพิ่มพนักงานใหม่ -->
     <div id="addStaffModal" class="modal-backdrop fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div class="modal-content bg-[#FDFBF7] rounded-2xl p-6 w-full max-w-md shadow-2xl border border-[#E8E2D5]">
+        <div class="modal-content bg-[#FDFBF7] rounded-2xl p-6 w-full max-w-md shadow-2xl border border-[#E8E2D5] max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center pb-3 border-b border-[#E8E2D5] mb-4">
                 <h3 class="text-xl font-bold text-[#382214]">เพิ่มพนักงานใหม่</h3>
                 <button onclick="closeModal('addStaffModal')" class="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
@@ -267,6 +266,32 @@ $conn_srv->close();
                         name="nickname"
                         class="w-full border border-gray-300 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#047857]"
                     >
+                </div>
+
+                <!-- เพิ่ม Username & Password -->
+                <div class="p-3 bg-amber-50/50 rounded-xl border border-amber-200/60 space-y-3">
+                    <p class="text-xs font-bold text-[#382214]">ข้อมูลสำหรับการเข้าสู่ระบบ (สำหรับหมอนวด)</p>
+                    <div>
+                        <label class="block text-sm font-semibold text-[#382214] mb-1">Username <span class="text-red-500">*</span></label>
+                        <input
+                            type="text"
+                            name="username"
+                            required
+                            placeholder="ระบุ Username เข้าใช้งาน"
+                            class="w-full border border-gray-300 rounded-xl p-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#047857]"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-[#382214] mb-1">Password <span class="text-red-500">*</span></label>
+                        <input
+                            type="password"
+                            name="password"
+                            required
+                            placeholder="ระบุ รหัสผ่าน"
+                            class="w-full border border-gray-300 rounded-xl p-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#047857]"
+                        >
+                    </div>
                 </div>
 
                 <div>
@@ -332,17 +357,15 @@ $conn_srv->close();
         </div>
     </div>
 
-   <div id="editStaffModal" class="modal-backdrop fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div class="modal-content bg-[#FDFBF7] rounded-2xl p-6 w-full max-w-md shadow-2xl border border-[#E8E2D5]">
+    <!-- MODAL POPUP แก้ไขพนักงาน -->
+    <div id="editStaffModal" class="modal-backdrop fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="modal-content bg-[#FDFBF7] rounded-2xl p-6 w-full max-w-md shadow-2xl border border-[#E8E2D5] max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center pb-3 border-b border-[#E8E2D5] mb-4">
                 <h3 class="text-xl font-bold text-[#382214]">แก้ไขข้อมูลพนักงาน</h3>
                 <button onclick="closeModal('editStaffModal')" class="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
             </div>
 
-            <!-- ✅ ต้องมั่นใจว่า <form> เปิดครอบตั้งแต่ตรงนี้ -->
             <form action="editstaff.php" method="POST" class="space-y-4">
-
-                <!-- ✅ และ <input hidden> ต้องอยู่ข้างในฟอร์มนี้ ห้ามหลุดออกนอกฟอร์ม -->
                 <input type="hidden" id="edit_staff_form_staff_id" name="staff_id">
 
                 <div>
@@ -364,6 +387,32 @@ $conn_srv->close();
                         name="nickname"
                         class="w-full border border-gray-300 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#047857]"
                     >
+                </div>
+
+                <!-- แก้ไข Username & Password -->
+                <div class="p-3 bg-amber-50/50 rounded-xl border border-amber-200/60 space-y-3">
+                    <p class="text-xs font-bold text-[#382214]">ข้อมูลสำหรับการเข้าสู่ระบบ</p>
+                    <div>
+                        <label class="block text-sm font-semibold text-[#382214] mb-1">Username <span class="text-red-500">*</span></label>
+                        <input
+                            type="text"
+                            id="edit_username"
+                            name="username"
+                            required
+                            class="w-full border border-gray-300 rounded-xl p-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#047857]"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-[#382214] mb-1">Password เปลี่ยนใหม่</label>
+                        <input
+                            type="password"
+                            id="edit_password"
+                            name="password"
+                            placeholder="เว้นว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน"
+                            class="w-full border border-gray-300 rounded-xl p-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#047857]"
+                        >
+                    </div>
                 </div>
 
                 <div>
@@ -426,13 +475,13 @@ $conn_srv->close();
                         บันทึกการแก้ไข
                     </button>
                 </div>
-            </form> <!-- ✅ ปิดฟอร์มตรงนี้ -->
+            </form>
         </div>
     </div>
 
+    <!-- MODAL POPUP ลบพนักงาน -->
     <div id="deleteStaffModal" class="modal-backdrop fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div class="modal-content bg-[#FDFBF7] rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-[#E8E2D5] text-center">
-            <!-- ไอคอนเตือน -->
             <div class="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
@@ -464,21 +513,20 @@ $conn_srv->close();
 
 <script>
     function openEditModal(btn) {
-        // ดึงค่าจากปุ่มที่กดโดยตรง (ตรวจสอบชื่อ attribute ให้ตรงกับใน HTML)
         const staffId   = btn.getAttribute('data-id');
         const name      = btn.getAttribute('data-name');
         const nickname  = btn.getAttribute('data-nickname');
+        const username  = btn.getAttribute('data-username');
         const phone     = btn.getAttribute('data-phone');
         const gender    = btn.getAttribute('data-gender');
         const birthdate = btn.getAttribute('data-birthdate');
-        const dayOff    = btn.getAttribute('data-dayoff'); // ใช้ data-dayoff ให้ตรงกับปุ่ม
+        const dayOff    = btn.getAttribute('data-dayoff');
 
-        console.log("📌 ได้รับ Staff ID แล้ว:", staffId); // เช็กใน Console (F12) จะต้องเห็นเลข ID ของพนักงานคนนั้นเด้งขึ้นมา
-
-        // ยัดค่าใส่ Input Hidden และช่องฟอร์มต่างๆ
         document.getElementById('edit_staff_form_staff_id').value = staffId;
         document.getElementById('edit_staff_name').value = name;
         document.getElementById('edit_nickname').value = nickname;
+        document.getElementById('edit_username').value = username;
+        document.getElementById('edit_password').value = ''; // เคลียร์รหัสผ่านเก่าเสมอ
         document.getElementById('edit_phone').value = phone;
         document.getElementById('edit_gender').value = gender;
         document.getElementById('edit_day_off').value = dayOff;
@@ -498,7 +546,6 @@ $conn_srv->close();
             console.warn('DatePicker notice:', err);
         }
 
-        // เปิด Modal
         openModal('editStaffModal');
     }
 

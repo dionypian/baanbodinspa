@@ -13,16 +13,38 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $birthdate = !empty($_POST['birthdate']) ? trim($_POST['birthdate']) : NULL;
     $day_off   = !empty($_POST['day_off']) ? trim($_POST['day_off']) : NULL;
 
-    if ($staff_id > 0 && !empty($name) && !empty($phone)) {
+    // รับค่า username และ password
+    $username  = trim($_POST['username'] ?? '');
+    $password  = trim($_POST['password'] ?? '');
+
+    if ($staff_id > 0 && !empty($name) && !empty($phone) && !empty($username)) {
         try {
-            $sql = "UPDATE staffs 
-                    SET name = :name, 
-                        nickname = :nickname, 
-                        phone = :phone, 
-                        gender = :gender, 
-                        birthdate = :birthdate, 
-                        day_off = :day_off 
-                    WHERE staff_id = :staff_id";
+            // ตรวจสอบว่ามีการระบุรหัสผ่านใหม่หรือไม่
+            if (!empty($password)) {
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+
+                $sql = "UPDATE staffs 
+                        SET name = :name, 
+                            nickname = :nickname, 
+                            username = :username,
+                            password = :password,
+                            phone = :phone, 
+                            gender = :gender, 
+                            birthdate = :birthdate, 
+                            day_off = :day_off 
+                        WHERE staff_id = :staff_id";
+            } else {
+                // หากไม่ได้กรอกรหัสผ่านใหม่ จะไม่อัปเดตรหัสผ่าน
+                $sql = "UPDATE staffs 
+                        SET name = :name, 
+                            nickname = :nickname, 
+                            username = :username,
+                            phone = :phone, 
+                            gender = :gender, 
+                            birthdate = :birthdate, 
+                            day_off = :day_off 
+                        WHERE staff_id = :staff_id";
+            }
 
             $stmt = $pdo->prepare($sql);
             $stmt->bindValue(':name', $name, PDO::PARAM_STR);
@@ -31,6 +53,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $nickname !== '' ? $nickname : null,
                 $nickname !== '' ? PDO::PARAM_STR : PDO::PARAM_NULL
             );
+            $stmt->bindValue(':username', $username, PDO::PARAM_STR);
+
+            if (!empty($password)) {
+                $stmt->bindValue(':password', $hashed_password, PDO::PARAM_STR);
+            }
+
             $stmt->bindValue(':phone', $phone, PDO::PARAM_STR);
             $stmt->bindValue(
                 ':gender',
@@ -58,7 +86,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $_SESSION['error'] = "เกิดข้อผิดพลาดฐานข้อมูล: " . $e->getMessage();
         }
     } else {
-        $_SESSION['error'] = "กรุณากรอกข้อมูลที่จำเป็น (ชื่อ และ เบอร์โทรศัพท์) ให้ครบถ้วน";
+        $_SESSION['error'] = "กรุณากรอกข้อมูลที่จำเป็น (ชื่อ, Username และ เบอร์โทรศัพท์) ให้ครบถ้วน";
     }
 
     header("Location: dashboard.php?tab=staff");
