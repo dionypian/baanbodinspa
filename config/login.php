@@ -25,7 +25,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $admin = $stmtAdmin->fetch(PDO::FETCH_ASSOC);
 
             if ($admin) {
-                // ตรวจสอบรหัสผ่าน (รองรับทั้ง password_hash และ ข้อความธรรมดา)
                 $adminPassword = $admin['password'] ?? null;
                 $isPasswordCorrect = is_string($adminPassword)
                     && (password_verify($password, $adminPassword) || $password === $adminPassword);
@@ -41,7 +40,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            // 2. ถ้าไม่ใช่แอดมิน ให้ตรวจสอบในตาราง customers
+            // 🟢 2. เพิ่มส่วนนี้: ตรวจสอบในตาราง staffs (สำหรับหมอนวด / พนักงาน)
+            $stmtStaff = $pdo->prepare("SELECT * FROM staffs WHERE username = :username OR phone = :phone LIMIT 1");
+            $stmtStaff->execute([
+                ':username' => $identifier,
+                ':phone'    => $identifier
+            ]);
+            $staff = $stmtStaff->fetch(PDO::FETCH_ASSOC);
+
+            if ($staff) {
+                $staffPassword = $staff['password'] ?? null;
+                $isStaffPasswordCorrect = is_string($staffPassword)
+                    && (password_verify($password, $staffPassword) || $password === $staffPassword);
+
+                if ($isStaffPasswordCorrect) {
+                    $_SESSION['staff_id']       = $staff['staff_id'];
+                    $_SESSION['staff_name']     = $staff['name'];
+                    $_SESSION['staff_nickname'] = $staff['nickname'];
+                    $_SESSION['role']           = 'staff';
+
+                    // Redirect ไปยังหน้าตารางงานเฉพาะของหมอนวด
+                    header("Location: staffcheckqueue.php");
+                    exit();
+                }
+            }
+
+            // 3. ตรวจสอบในตาราง customers (ลูกค้าทั่วไป)
             $stmtUser = $pdo->prepare("SELECT * FROM customers WHERE email = :email OR username = :username OR phone = :phone LIMIT 1");
             $stmtUser->execute([
                 ':email' => $identifier,

@@ -68,20 +68,6 @@ foreach ($summary_staffs as $st) {
     $staff_queues[$st['staff_id']] = $stmt_sum->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// หาจำนวนรอบสูงสุดที่หมอนวดได้รับงานในวันนั้น
-$max_rounds = 0;
-if (!empty($summary_staffs)) {
-    foreach ($summary_staffs as $st) {
-        $st_id = $st['staff_id'];
-        $q_list = $staff_queues[$st_id] ?? [];
-        if (!empty($q_list)) {
-            $count = count($q_list);
-            if ($count > $max_rounds) $max_rounds = $count;
-        }
-    }
-}
-if ($max_rounds === 0) $max_rounds = 1;
-
 // กำหนด Header ให้เปิดเป็น Excel
 $filename = "queue_schedule_" . $summary_date . ".xls";
 header("Content-Type: application/vnd.ms-excel; charset=UTF-8");
@@ -115,12 +101,7 @@ echo "\xEF\xBB\xBF";
                 <th rowspan="2">No</th>
                 <th rowspan="2">ชื่อหมอ</th>
                 <th rowspan="2">เวลาเข้างาน</th>
-                
-                <!-- หัวตารางรอบที่ 1 ถึง N -->
-                <?php for ($r = 1; $r <= $max_rounds; $r++): ?>
-                    <th rowspan="2">รอบที่ <?= $r ?></th>
-                <?php endfor; ?>
-                
+                <th colspan="4" rowspan="2">คิวจอง (แสดง 4 รอบต่อแถว)</th>
                 <th colspan="4">รวมรายรับ</th>
                 <th rowspan="2">ค่ามือหมอ</th>
             </tr>
@@ -167,51 +148,65 @@ echo "\xEF\xBB\xBF";
 
                         $grand_cash += $cash; $grand_transfer += $transfer; $grand_credit += $credit; 
                         $grand_coupon += $coupon; $grand_hand_fee += $hand_fee;
+
+                        $queue_rows = array_chunk(array_values($q_list), 4);
+                        if (empty($queue_rows)) {
+                            $queue_rows = [[]];
+                        }
+                        $queue_row_count = count($queue_rows);
                 ?>
-                <tr>
-                    <td><?= $no++ ?></td>
-                    <td class="text-left">
-                        <b><?= htmlspecialchars($st['nickname'] ?? $st['name'], ENT_QUOTES, 'UTF-8') ?></b>
-                    </td>
-                    <td class="text-left">
-                        <?php if (!empty($st['checkin_time'])): ?>
-                            <?= date('H:i', strtotime($st['checkin_time'])) ?> น.
-                        <?php else: ?>
-                            ยังไม่เช็กอิน
-                        <?php endif; ?>
-                    </td>
-
-                    <!-- แสดงคิวรอบต่างๆ -->
-                    <?php for ($i = 0; $i < $max_rounds; $i++): ?>
-                        <td class="text-left">
-                            <?php if (isset($q_list[$i])): 
-                                $qi = $q_list[$i];
-                                $start_t  = date('H:i', strtotime($qi['booking_time']));
-                                $duration = (int)($qi['total_duration'] ?? $qi['duration'] ?? 60);
-                                $end_t    = date('H:i', strtotime("+{$duration} minutes", strtotime($qi['booking_time'])));
-                                $service_name = !empty($qi['service_names']) ? $qi['service_names'] : ($qi['service_name'] ?? 'ไม่ระบุบริการ');
-                                $price        = (float)($qi['total_price'] ?? $qi['price'] ?? 0);
-                                $method = strtolower(trim($qi['payment_method'] ?? ''));
-                                $coupon_code = !empty($qi['coupon_code']) ? trim($qi['coupon_code']) : '';
-                            ?>
-                                <b><?= $start_t ?> - <?= $end_t ?></b>
-                                <?php if ($method === 'coupon' || $method === 'คูปอง'): ?>
-                                    <?= htmlspecialchars($coupon_code, ENT_QUOTES, 'UTF-8') ?><br>
-                                <?php else: ?>
-                                    (<?= number_format($price) ?>฿)<br>
-                                <?php endif; ?>
-                                <?= htmlspecialchars($service_name, ENT_QUOTES, 'UTF-8') ?>
-                                (<?= $duration ?> นาที)
+                    <?php foreach ($queue_rows as $row_index => $round_group): ?>
+                        <tr>
+                            <?php if ($row_index === 0): ?>
+                                <td rowspan="<?= $queue_row_count ?>"><?= $no++ ?></td>
+                                <td rowspan="<?= $queue_row_count ?>" class="text-left">
+                                    <b><?= htmlspecialchars($st['nickname'] ?? $st['name'], ENT_QUOTES, 'UTF-8') ?></b>
+                                </td>
+                                <td rowspan="<?= $queue_row_count ?>" class="text-left">
+                                    <?php if (!empty($st['checkin_time'])): ?>
+                                        <?= date('H:i', strtotime($st['checkin_time'])) ?> น.
+                                    <?php else: ?>
+                                        ยังไม่เช็กอิน
+                                    <?php endif; ?>
+                                </td>
                             <?php endif; ?>
-                        </td>
-                    <?php endfor; ?>
 
-                    <td class="text-right"><?= number_format($cash) ?></td>
-                    <td class="text-right"><?= number_format($transfer) ?></td>
-                    <td class="text-right"><?= number_format($credit) ?></td>
-                    <td class="text-right"><?= number_format($coupon) ?></td>
-                    <td class="text-right"><b><?= number_format($hand_fee) ?></b></td>
-                </tr>
+                            <!-- แสดงคิว 4 รอบต่อแถว พร้อมเลขรอบ -->
+                            <?php for ($column = 0; $column < 4; $column++): ?>
+                                <td class="text-left">
+                                    <?php if (isset($round_group[$column])):
+                                        $qi = $round_group[$column];
+                                        $round_number = ($row_index * 4) + $column + 1;
+                                        $start_t  = date('H:i', strtotime($qi['booking_time']));
+                                        $duration = (int)($qi['total_duration'] ?? $qi['duration'] ?? 60);
+                                        $end_t    = date('H:i', strtotime("+{$duration} minutes", strtotime($qi['booking_time'])));
+                                        $service_name = !empty($qi['service_names']) ? $qi['service_names'] : ($qi['service_name'] ?? 'ไม่ระบุบริการ');
+                                        $price        = (float)($qi['total_price'] ?? $qi['price'] ?? 0);
+                                        $method = strtolower(trim($qi['payment_method'] ?? ''));
+                                        $coupon_code = !empty($qi['coupon_code']) ? trim($qi['coupon_code']) : '';
+                                    ?>
+                                        <b>รอบที่ <?= $round_number ?></b><br>
+                                        <b><?= $start_t ?> - <?= $end_t ?></b>
+                                        <?php if ($method === 'coupon' || $method === 'คูปอง'): ?>
+                                            <?= htmlspecialchars($coupon_code, ENT_QUOTES, 'UTF-8') ?><br>
+                                        <?php else: ?>
+                                            (<?= number_format($price) ?>฿)<br>
+                                        <?php endif; ?>
+                                        <?= htmlspecialchars($service_name, ENT_QUOTES, 'UTF-8') ?>
+                                        (<?= $duration ?> นาที)
+                                    <?php endif; ?>
+                                </td>
+                            <?php endfor; ?>
+
+                            <?php if ($row_index === 0): ?>
+                                <td rowspan="<?= $queue_row_count ?>" class="text-right"><?= number_format($cash) ?></td>
+                                <td rowspan="<?= $queue_row_count ?>" class="text-right"><?= number_format($transfer) ?></td>
+                                <td rowspan="<?= $queue_row_count ?>" class="text-right"><?= number_format($credit) ?></td>
+                                <td rowspan="<?= $queue_row_count ?>" class="text-right"><?= number_format($coupon) ?></td>
+                                <td rowspan="<?= $queue_row_count ?>" class="text-right"><b><?= number_format($hand_fee) ?></b></td>
+                            <?php endif; ?>
+                        </tr>
+                    <?php endforeach; ?>
                 <?php 
                     endforeach; 
                 endif;
@@ -219,13 +214,13 @@ echo "\xEF\xBB\xBF";
                 if (empty($summary_staffs)):
                 ?>
                 <tr>
-                    <td colspan="<?= 3 + $max_rounds + 5 ?>">ยังไม่มีคิวจองหรือพนักงานเช็กอินในวันที่ <?= date('d/m/Y', strtotime($summary_date)) ?></td>
+                    <td colspan="12">ยังไม่มีคิวจองหรือพนักงานเช็กอินในวันที่ <?= date('d/m/Y', strtotime($summary_date)) ?></td>
                 </tr>
                 <?php endif; ?>
         </tbody>
         <tfoot>
             <tr class="bg-total">
-                <td colspan="<?= 3 + $max_rounds ?>">รวมทั้งหมด</td>
+                <td colspan="7">รวมทั้งหมด</td>
                 <td class="text-right"><?= number_format($grand_cash) ?></td>
                 <td class="text-right"><?= number_format($grand_transfer) ?></td>
                 <td class="text-right"><?= number_format($grand_credit) ?></td>

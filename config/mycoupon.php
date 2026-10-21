@@ -145,6 +145,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $sql_user_coupons = "
     SELECT 
         cc.id AS cus_coupon_id,
+        cc.coupon_id,
+        cc.coupon_book_id,
         cc.coupon_code,
         cc.used,
         c.coupon_name,
@@ -155,11 +157,32 @@ $sql_user_coupons = "
     INNER JOIN coupon c ON cc.coupon_id = c.coupon_id
     LEFT JOIN allservices s ON cc.service_id = s.id
     WHERE cc.cus_id = :cus_id
-    ORDER BY cc.used ASC, cc.id DESC
+    ORDER BY cc.coupon_book_id DESC, cc.id DESC
 ";
 $stmt_u = $pdo->prepare($sql_user_coupons);
 $stmt_u->execute([':cus_id' =>$cus_id]);
 $coupons =$stmt_u->fetchAll(PDO::FETCH_ASSOC);
+
+$coupon_books = [];
+foreach ($coupons as $coupon) {
+    $book_key = !empty($coupon['coupon_book_id'])
+        ? 'book-' . $coupon['coupon_book_id']
+        : 'legacy-' . $coupon['coupon_id'];
+
+    if (!isset($coupon_books[$book_key])) {
+        $coupon_books[$book_key] = [
+            'coupon_book_id' => $coupon['coupon_book_id'],
+            'coupon_name' => $coupon['coupon_name'],
+            'coupons' => [],
+            'used_count' => 0
+        ];
+    }
+
+    $coupon_books[$book_key]['coupons'][] = $coupon;
+    if ((int)$coupon['used'] === 1) {
+        $coupon_books[$book_key]['used_count']++;
+    }
+}
 
 // ----------------------------------------------------
 // 2. ดึงรายการเล่มคูปองที่มีขายจากตาราง coupon (สำหรับ Pop-up)
@@ -217,8 +240,11 @@ function getCouponBadge($used) {
 
         <!-- แจ้งเตือนสถานะการทำรายการ -->
         <?php if (!empty($message)): ?>
-            <div class="mb-6 p-4 rounded-2xl text-sm font-medium <?= $message_type === 'error' ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300' ?>">
-                <?= htmlspecialchars($message) ?>
+            <div role="<?= $message_type === 'error' ? 'alert' : 'status' ?>" aria-live="polite" class="mb-6 p-4 rounded-2xl text-sm font-medium flex items-start justify-between gap-4 <?= $message_type === 'error' ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300' ?>">
+                <span><?= htmlspecialchars($message) ?></span>
+                <button type="button" onclick="this.parentElement.remove()" aria-label="ปิดการแจ้งเตือน" class="shrink-0 text-lg leading-none opacity-70 hover:opacity-100">
+                    &times;
+                </button>
             </div>
         <?php endif; ?>
 
@@ -234,57 +260,68 @@ function getCouponBadge($used) {
             </div>
         <?php else: ?>
 
-            <!-- รายการคูปองของลูกค้า -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <?php foreach ($coupons as$coupon): 
-                    $is_used = ($coupon['used'] == 1);
+            <!-- รายการคูปองแยกตามเล่ม -->
+            <div class="space-y-6">
+                <?php foreach ($coupon_books as $book):
+                    $total_coupons = count($book['coupons']);
                 ?>
-                    <div class="bg-white rounded-3xl shadow-sm border border-[#E8E2D5] overflow-hidden flex flex-col justify-between transition-all relative <?php echo $is_used ? 'opacity-60 grayscale-[30%]' : 'hover:shadow-md'; ?>">
-                        
-                        <!-- ตกแต่งขอบตั๋วคูปอง (ด้านซ้ายและขวา) -->
-                        <div class="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#FAF6F0] rounded-full border-r border-[#E8E2D5]"></div>
-                        <div class="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#FAF6F0] rounded-full border-l border-[#E8E2D5]"></div>
+                    <section class="bg-white rounded-3xl shadow-sm border border-[#E8E2D5] p-5 sm:p-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                            <div>
+                                <h2 class="text-lg font-bold text-[#382214]">
+                                    <?= htmlspecialchars($book['coupon_name']) ?>
+                                    <?php if (!empty($book['coupon_book_id'])): ?>
+                                        <span class="text-sm font-medium text-gray-500">- เล่มที่ <?= htmlspecialchars((string)$book['coupon_book_id']) ?></span>
+                                    <?php else: ?>
+                                        <span class="text-sm font-medium text-gray-500">- ไม่ระบุเล่ม</span>
+                                    <?php endif; ?>
+                                </h2>
+                            </div>
+                            <div class="inline-flex items-center gap-1.5 self-start sm:self-auto bg-[#FAF6F0] border border-[#E8E2D5] rounded-xl px-3 py-2 text-sm">
+                                <span class="font-bold text-[#382214]">ใช้แล้ว <?= number_format($book['used_count']) ?>/<?= number_format($total_coupons) ?> ใบ</span>
+                                <span class="text-gray-500">(ทั้งหมด)</span>
+                            </div>
+                        </div>
 
-                        <!-- ส่วนบน: ข้อมูลคูปอง -->
-                        <div class="p-5 sm:p-6 space-y-3">
-                            <div class="flex justify-between items-start gap-2">
-                                <span class="text-sm font-bold uppercase tracking-wider text-[#5A3A29] bg-[#FAF6F0] px-3 py-1 rounded-lg border border-[#E8E2D5]">
-                                    โค้ด: <?= htmlspecialchars($coupon['coupon_code']) ?>
-                                </span>
-                                <div>
-                                    <?= getCouponBadge($coupon['used']) ?>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <?php foreach ($book['coupons'] as $coupon):
+                                $is_used = ((int)$coupon['used'] === 1);
+                            ?>
+                                <div class="bg-[#FDFBF7] rounded-2xl shadow-sm border border-[#E8E2D5] overflow-hidden flex flex-col justify-between transition-all <?php echo $is_used ? 'opacity-60 grayscale-[30%]' : 'hover:shadow-md'; ?>">
+                                    <div class="p-4 sm:p-5 space-y-3">
+                                        <div class="flex justify-between items-start gap-2">
+                                            <span class="text-sm font-bold uppercase tracking-wider text-[#5A3A29] bg-white px-3 py-1 rounded-lg border border-[#E8E2D5]">
+                                                โค้ด: <?= htmlspecialchars($coupon['coupon_code']) ?>
+                                            </span>
+                                            <?= getCouponBadge($coupon['used']) ?>
+                                        </div>
+
+                                        <div>
+                                            <h3 class="text-lg font-bold text-[#382214]">
+                                                <?= htmlspecialchars($coupon['coupon_name']) ?>
+                                            </h3>
+                                            <?php if (!empty($coupon['service_name'])): ?>
+                                                <p class="text-sm text-gray-500 mt-1 leading-relaxed">
+                                                    สำหรับบริการ: <strong class="text-[#382214]"><?= htmlspecialchars($coupon['service_name']) ?></strong> (<?= htmlspecialchars((string)$coupon['duration']) ?> นาที)
+                                                </p>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+
+                                    <div class="border-t border-dashed border-[#E8E2D5] p-4 flex justify-between items-center text-xs text-gray-500">
+                                        <span class="text-gray-400 font-medium">Baanbodinspa Coupon</span>
+                                        <?php if (!$is_used): ?>
+                                            <a href="booking.php?coupon=<?= urlencode($coupon['coupon_code']) ?>" class="bg-[#382214] text-white px-4 py-1.5 rounded-xl font-medium hover:bg-[#5A3A29] transition-colors shadow-sm">
+                                                ใช้คูปองจองคิว
+                                            </a>
+                                        <?php else: ?>
+                                            <span class="text-gray-400 font-medium">ใช้สิทธิ์แล้ว</span>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
-                            </div>
-
-                            <div class="mt-2">
-                                <h3 class="text-xl font-bold text-[#382214]">
-                                    <?= htmlspecialchars($coupon['coupon_name']) ?>
-                                </h3>
-                                <?php if (!empty($coupon['service_name'])): ?>
-                                    <p class="text-base text-gray-500 mt-1 leading-relaxed">
-                                        สำหรับบริการ: <strong class="text-[#382214]"><?= htmlspecialchars($coupon['service_name']) ?></strong> (<?=$coupon['duration'] ?> นาที)
-                                    </p>
-                                <?php endif; ?>
-                            </div>
+                            <?php endforeach; ?>
                         </div>
-
-                        <!-- เส้นประรอยต่อคูปอง -->
-                        <div class="border-b border-dashed border-[#E8E2D5] mx-4"></div>
-
-                        <!-- ส่วนล่าง: ปุ่มใช้งาน -->
-                        <div class="p-4 sm:p-5 bg-[#FDFBF7] flex justify-between items-center text-xs text-gray-500">
-                            <span class="text-gray-400 font-medium">Baanbodinspa Coupon</span>
-
-                            <?php if (!$is_used): ?>
-                                <a href="booking.php?coupon=<?= urlencode($coupon['coupon_code']) ?>" class="bg-[#382214] text-white px-4 py-1.5 rounded-xl font-medium hover:bg-[#5A3A29] transition-colors shadow-sm">
-                                    ใช้คูปองจองคิว
-                                </a>
-                            <?php else: ?>
-                                <span class="text-gray-400 font-medium">ใช้สิทธิ์แล้ว</span>
-                            <?php endif; ?>
-                        </div>
-
-                    </div>
+                    </section>
                 <?php endforeach; ?>
             </div>
 
