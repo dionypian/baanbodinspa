@@ -40,9 +40,11 @@ $sql_summary_bookings = "
         b.booking_date,
         b.booking_time,
         b.status,
+        bi.service_id,
         srv.name as service_name,
         srv.duration,
         srv.price,
+        srv.coupon_id,
         srv.commission as hand_fee,
         COALESCE(p.payment_method, b.payment_method) as payment_method,
         p.coupon_code
@@ -123,24 +125,160 @@ echo "\xEF\xBB\xBF";
                         $q_list = $staff_queues[$st_id] ?? [];
 
                         $cash = 0; $transfer = 0; $credit = 0; $coupon = 0; $hand_fee = 0;
+                        $booking_payment_details = [];
 
                         foreach ($q_list as $q) {
-                            $price = (float)($q['total_price'] ?? $q['price'] ?? 0);
-                            $method = strtolower(trim($q['payment_method'] ?? ''));
-                            if (empty($method)) {
-                                continue;
+                            $booking_id = $q['booking_id'] ?? $q['id'];
+                            $service_price = (float)($q['total_price'] ?? $q['price'] ?? 0);
+                            $is_full_coverage_face_massage =
+                                (int)($q['service_id'] ?? 0) === 35
+                                && (int)($q['coupon_id'] ?? 0) === 3;
+                            $stmt_payments = $pdo->prepare("
+                                SELECT payment_id, amount, payment_method, coupon_code
+                                FROM payments
+                                WHERE booking_id = :b_id
+                                ORDER BY payment_id ASC
+                            ");
+                            $stmt_payments->execute([':b_id' => $booking_id]);
+                            $payment_records = $stmt_payments->fetchAll(PDO::FETCH_ASSOC);
+
+                            $coupon_details = [];
+                            $latest_channel_payments = [];
+                            $pending_details = [];
+                            foreach ($payment_records as $payment_record) {
+                                $amount = (float)$payment_record['amount'];
+                                $method = strtolower(trim($payment_record['payment_method'] ?? ''));
+
+                                if ($method === 'coupon' || $method === 'คูปอง') {
+                                    $code = trim($payment_record['coupon_code'] ?? '');
+                                    if ($amount <= 0 && $code !== '') {
+                                        $amount = 300;
+                                    }
+                                    if ($is_full_coverage_face_massage && $code !== '') {
+                                        $amount = $service_price;
+                                    }
+                                    $codes = array_values(array_unique(array_filter(array_map('trim', explode(',', $code)))));
+                                    $coupon_details[] = [
+                                        'label' => $code === '' ? 'คูปอง' : 'คูปอง ' . $code,
+                                        'amount' => $amount,
+                                        'method' => 'coupon',
+                                        'codes' => $codes,
+                                        'payment_id' => (int)$payment_record['payment_id']
+                                    ];
+                                } elseif ($method === 'pending' && !$is_full_coverage_face_massage) {
+                                    $pending_details[] = [
+                                        'label' => 'ค้างชำระ',
+                                        'amount' => $amount,
+                                        'method' => 'pending'
+                                    ];
+                                } elseif (in_array($method, ['cash', 'เงินสด'], true)) {
+                                    $latest_channel_payments['cash'] = [
+                                        'label' => 'เงินสด',
+                                        'amount' => $amount,
+                                        'method' => 'cash'
+                                    ];
+                                } elseif (in_array($method, ['transfer', 'โอน', 'promptpay'], true)) {
+                                    $latest_channel_payments['transfer'] = [
+                                        'label' => 'โอน',
+                                        'amount' => $amount,
+                                        'method' => 'transfer'
+                                    ];
+                                } elseif (in_array($method, ['credit', 'เครดิต', 'card'], true)) {
+                                    $latest_channel_payments['credit'] = [
+                                        'label' => 'เครดิต',
+                                        'amount' => $amount,
+                                        'method' => 'credit'
+                                    ];
+                                }
                             }
 
-                            if ($method === 'cash' || $method === 'เงินสด') {
-                                $cash += $price;
-                            } elseif ($method === 'transfer' || $method === 'โอน' || $method === 'promptpay') {
-                                $transfer += $price;
-                            } elseif ($method === 'credit' || $method === 'เครดิต' || $method === 'card') {
-                                $credit += $price;
-                            } elseif ($method === 'coupon' || $method === 'คูปอง') {
-                                $coupon += $price;
-                            } else {
-                                $cash += $price;
+                            $unique_coupon_details = [];
+                            foreach ($coupon_details as $coupon_detail) {
+                                $codes = $coupon_detail['codes'];
+                                sort($codes);
+                                $signature = empty($codes)
+                                    ? 'payment-' . $coupon_detail['payment_id']
+                                    : implode(',', $codes);
+                                if (
+                                    !isset($unique_coupon_details[$signature])
+                                    || $coupon_detail['payment_id'] > $unique_coupon_details[$signature]['payment_id']
+                                ) {
+                                    $unique_coupon_details[$signature] = $coupon_detail;
+                                }
+                            }
+
+                            $combined_coupon_codes = [];
+                            foreach ($unique_coupon_details as $coupon_detail) {
+                                if (count($coupon_detail['codes']) > 1) {
+                                    foreach ($coupon_detail['codes'] as $code) {
+                                        $combined_coupon_codes[$code] = true;
+                                    }
+                                }
+                            }
+
+                            $payment_details = [];
+                            foreach ($unique_coupon_details as $coupon_detail) {
+                                if (
+                                    count($coupon_detail['codes']) === 1
+                                    && isset($combined_coupon_codes[$coupon_detail['codes'][0]])
+                                ) {
+                                    continue;
+                                }
+                                $payment_details[] = [
+                                    'label' => $coupon_detail['label'],
+                                    'amount' => $coupon_detail['amount'],
+                                    'method' => $coupon_detail['method']
+                                ];
+                            }
+                            $coupon_amount = array_sum(array_column($payment_details, 'amount'));
+                            $remaining_paid_amount = ($q['status'] ?? '') === 'completed'
+                                ? max(0, $service_price - $coupon_amount)
+                                : null;
+
+                            foreach (array_reverse($latest_channel_payments) as $channel_payment) {
+                                if ($remaining_paid_amount !== null) {
+                                    $channel_payment['amount'] = min($channel_payment['amount'], $remaining_paid_amount);
+                                    $remaining_paid_amount -= $channel_payment['amount'];
+                                }
+                                if ($channel_payment['amount'] > 0) {
+                                    $payment_details[] = $channel_payment;
+                                }
+                            }
+
+                            if (($q['status'] ?? '') !== 'completed') {
+                                $payment_details = array_merge($payment_details, $pending_details);
+                            }
+
+                            if (empty($payment_records) && ($q['status'] ?? '') === 'completed') {
+                                $method = strtolower(trim($q['payment_method'] ?? 'cash'));
+                                $fallback = [
+                                    'transfer' => ['label' => 'โอน', 'method' => 'transfer'],
+                                    'โอน' => ['label' => 'โอน', 'method' => 'transfer'],
+                                    'promptpay' => ['label' => 'โอน', 'method' => 'transfer'],
+                                    'credit' => ['label' => 'เครดิต', 'method' => 'credit'],
+                                    'เครดิต' => ['label' => 'เครดิต', 'method' => 'credit'],
+                                    'card' => ['label' => 'เครดิต', 'method' => 'credit'],
+                                    'coupon' => ['label' => 'คูปอง', 'method' => 'coupon'],
+                                    'คูปอง' => ['label' => 'คูปอง', 'method' => 'coupon']
+                                ];
+                                $fallback_payment = $fallback[$method] ?? ['label' => 'เงินสด', 'method' => 'cash'];
+                                $payment_details[] = array_merge($fallback_payment, ['amount' => $service_price]);
+                            }
+
+                            $booking_payment_details[$booking_id] = $payment_details;
+
+                            if (($q['status'] ?? '') === 'completed') {
+                                foreach ($payment_details as $payment_detail) {
+                                    if ($payment_detail['method'] === 'cash') {
+                                        $cash += $payment_detail['amount'];
+                                    } elseif ($payment_detail['method'] === 'transfer') {
+                                        $transfer += $payment_detail['amount'];
+                                    } elseif ($payment_detail['method'] === 'credit') {
+                                        $credit += $payment_detail['amount'];
+                                    } elseif ($payment_detail['method'] === 'coupon') {
+                                        $coupon += $payment_detail['amount'];
+                                    }
+                                }
                             }
 
                             $hand_fee += (int)($q['hand_fee'] ?? 0);
@@ -182,18 +320,17 @@ echo "\xEF\xBB\xBF";
                                         $end_t    = date('H:i', strtotime("+{$duration} minutes", strtotime($qi['booking_time'])));
                                         $service_name = !empty($qi['service_names']) ? $qi['service_names'] : ($qi['service_name'] ?? 'ไม่ระบุบริการ');
                                         $price        = (float)($qi['total_price'] ?? $qi['price'] ?? 0);
-                                        $method = strtolower(trim($qi['payment_method'] ?? ''));
-                                        $coupon_code = !empty($qi['coupon_code']) ? trim($qi['coupon_code']) : '';
+                                        $booking_id   = $qi['booking_id'] ?? $qi['id'];
                                     ?>
                                         <b>รอบที่ <?= $round_number ?></b><br>
                                         <b><?= $start_t ?> - <?= $end_t ?></b>
-                                        <?php if ($method === 'coupon' || $method === 'คูปอง'): ?>
-                                            <?= htmlspecialchars($coupon_code, ENT_QUOTES, 'UTF-8') ?><br>
-                                        <?php else: ?>
-                                            (<?= number_format($price) ?>฿)<br>
-                                        <?php endif; ?>
+                                        (<?= number_format($price) ?>฿)<br>
                                         <?= htmlspecialchars($service_name, ENT_QUOTES, 'UTF-8') ?>
                                         (<?= $duration ?> นาที)
+                                        <?php foreach ($booking_payment_details[$booking_id] ?? [] as $payment_detail): ?>
+                                            <br><?= htmlspecialchars($payment_detail['label'], ENT_QUOTES, 'UTF-8') ?>
+                                            <?= number_format($payment_detail['amount']) ?>฿
+                                        <?php endforeach; ?>
                                     <?php endif; ?>
                                 </td>
                             <?php endfor; ?>

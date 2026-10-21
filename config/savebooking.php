@@ -207,14 +207,42 @@ try {
             $matched_booking_id = $all_booked_service_pool[$matched_key]['booking_id'];
 
             // 3.3 บันทึกชำระเงินลงตาราง payments ผูกกับ booking_id ของแถวนั้นๆ
+            $matched_service_id = $all_booked_service_pool[$matched_key]['service_id'];
+            $stmt_srv_price = $pdo->prepare("SELECT price, coupon_id FROM allservices WHERE id = :sid");
+            $stmt_srv_price->execute([':sid' => $matched_service_id]);
+            $matched_service = $stmt_srv_price->fetch(PDO::FETCH_ASSOC);
+            $full_price = (float)($matched_service['price'] ?? 0);
+
+            $is_full_coverage_face_massage_coupon =
+                (int)$matched_service_id === 35
+                && (int)($matched_service['coupon_id'] ?? 0) === 3;
+            $coupon_discount_value = $is_full_coverage_face_massage_coupon
+                ? $full_price
+                : 300.00;
+
             $stmt_pay = $pdo->prepare("
                 INSERT INTO payments (booking_id, amount, payment_method, coupon_code, paid_at) 
-                VALUES (:b_id, 0.00, 'coupon', :c_code, NOW())
+                VALUES (:b_id, :amount, 'coupon', :c_code, NOW())
             ");
             $stmt_pay->execute([
                 ':b_id'   => $matched_booking_id,
+                ':amount' => $coupon_discount_value,
                 ':c_code' => $cp_data['coupon_code']
             ]);
+
+            // 🟢 กรณี 90 นาที (ราคา 450 - คูปอง 300 = เหลือส่วนต่าง 150 บาท)
+            // บันทึกยอดค้างชำระส่วนต่างไว้ใน payments เพื่อให้แอดมินกดรับชำระหน้าร้านได้
+            $remaining_balance = $full_price - $coupon_discount_value;
+            if ($remaining_balance > 0) {
+                $stmt_rem = $pdo->prepare("
+                    INSERT INTO payments (booking_id, amount, payment_method, paid_at) 
+                    VALUES (:b_id, :amount, 'pending', NOW())
+                ");
+                $stmt_rem->execute([
+                    ':b_id'   => $matched_booking_id,
+                    ':amount' => $remaining_balance
+                ]);
+            }
 
             // 3.4 ปรับสถานะคูปองใบนี้เป็นใช้แล้ว (used = 1)
             $stmt_use = $pdo->prepare("

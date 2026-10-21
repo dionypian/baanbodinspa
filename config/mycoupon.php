@@ -22,23 +22,27 @@ $message = $_SESSION['flash_message'] ?? '';
 $message_type = $_SESSION['flash_type'] ?? '';
 unset($_SESSION['flash_message'], $_SESSION['flash_type']);
 
-function generateNextCouponCode($pdo) {
+// 🟢 ฟังก์ชันรันรหัสคูปองตาม Prefix (TM สำหรับนวดไทย / FM สำหรับนวดหน้าเด้ง)
+function generateNextCouponCode($pdo, $prefix = 'TM') {
+    // ดึงรหัสคูปองล่าสุดที่ขึ้นต้นด้วย Prefix นั้นๆ
     $sql = "SELECT coupon_code 
             FROM cus_coupon 
-            WHERE coupon_code REGEXP '^A[0-9]+$' 
+            WHERE coupon_code REGEXP :pattern 
             ORDER BY LENGTH(coupon_code) DESC, coupon_code DESC 
             LIMIT 1";
-    $stmt = $pdo->query($sql);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':pattern' => '^' . $prefix . '[0-9]+$']);
     $last_code = $stmt->fetchColumn();
 
     if ($last_code) {
-        $num = intval(substr($last_code, 1));
+        // ตัดตัวอักษร Prefix ออกเพื่อเอาเฉพาะตัวเลข เช่น TM00005 -> 5
+        $num = intval(substr($last_code, strlen($prefix)));
         $next_num = $num + 1;
     } else {
         $next_num = 1;
     }
 
-    return 'A' . str_pad($next_num, 5, '0', STR_PAD_LEFT);
+    return $prefix . str_pad($next_num, 5, '0', STR_PAD_LEFT);
 }
 
 // ----------------------------------------------------
@@ -83,11 +87,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $total_price = $target_coupon['price'];
             $total_leaves = intval($target_coupon['total_leaves']);
 
-            // 🟢 ดึง service_id หลักของบริการที่ผูกกับ coupon_id นี้
-            $sql_s = "SELECT id FROM allservices WHERE coupon_id = :coupon_id ORDER BY duration ASC, id ASC LIMIT 1";
+            // 🟢 ดึง service_id และชื่อบริการที่ผูกกับ coupon_id นี้
+            $sql_s = "SELECT id, name FROM allservices WHERE coupon_id = :coupon_id ORDER BY duration ASC, id ASC LIMIT 1";
             $stmt_s = $pdo->prepare($sql_s);
             $stmt_s->execute([':coupon_id' => $coupon_id]);
-            $service_id = $stmt_s->fetchColumn(); 
+            $service_data = $stmt_s->fetch(PDO::FETCH_ASSOC);
+            $service_id = $service_data['id'] ?? null;
+            $service_name = $service_data['name'] ?? '';
+
+            // 🟢 กำหนด Prefix ตามชื่อแพ็กเกจ/บริการ (ถ้าเป็นหน้าเด้งใช้ FM / ที่เหลือใช้ TM)
+            $coupon_title = $target_coupon['coupon_name'] . ' ' . $service_name;
+            $prefix = (mb_strpos($coupon_title, 'หน้า') !== false) ? 'FM' : 'TM';
 
             // 2. บันทึกลงตาราง coupon_book
             $sql_book = "INSERT INTO coupon_book (cus_id, coupon_id, total_price, payment_method, slip_image, sold_date) 
@@ -102,12 +112,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
             $coupon_book_id =$pdo->lastInsertId();
 
-            // 3. สร้างใบคูปองลงตาราง cus_coupon โดยใช้ service_id ที่ดึงได้
+            // 3. สร้างใบคูปองลงตาราง cus_coupon โดยใช้ Prefix ตามประเภท
             $sql_cus_coupon = "INSERT INTO cus_coupon (coupon_book_id, cus_id, coupon_id, service_id, coupon_code, used) 
                                VALUES (:coupon_book_id, :cus_id, :coupon_id, :service_id, :coupon_code, 0)";
             $stmt_cc = $pdo->prepare($sql_cus_coupon);
 
-            for ($i = 0; $i <$total_leaves; $i++) {$coupon_code = generateNextCouponCode($pdo);$stmt_cc->execute([
+            for ($i = 0; $i < $total_leaves; $i++) {
+                // 🟢 รันโค้ดรหัสคูปองถัดไปของ Prefix นั้นๆ
+                $coupon_code = generateNextCouponCode($pdo, $prefix);$stmt_cc->execute([
                     ':coupon_book_id' => $coupon_book_id,
                     ':cus_id' => $cus_id,
                     ':coupon_id' => $coupon_id,
@@ -496,4 +508,4 @@ function getCouponBadge($used) {
     </script>
 
 </body>
-</html> 
+</html>

@@ -67,9 +67,9 @@ $sql_bookings = "SELECT b.*,
                         c.name as customer_name, c.phone as customer_phone,
                         s.nickname as staff_nickname, s.name as staff_name,
                         srv.name as default_service_name, srv.duration as default_duration, srv.price as default_price,
-                        p.payment_method as payment_method,
+                        COALESCE(p.payment_method, b.payment_method) as payment_method,
                         p.slip_image as slip_image,
-                        p.coupon_code as coupon_code
+                        GROUP_CONCAT(DISTINCT p.coupon_code SEPARATOR ', ') as coupon_code
                  FROM bookings b
                  LEFT JOIN customers c ON b.cus_id = c.cus_id
                  LEFT JOIN staffs s ON b.staff_id = s.staff_id
@@ -91,7 +91,7 @@ $bookings = $stmt_b->fetchAll(PDO::FETCH_ASSOC);
 // --- ดึงรายละเอียดบริการของการจองแต่ละรายการ (ผ่าน booking_items) ---
 $booking_items_map = [];
 try {
-    $stmt_items = $pdo->query("SELECT bi.*, s.name as service_name, s.price, s.duration 
+    $stmt_items = $pdo->query("SELECT bi.*, s.name as service_name, s.price, s.duration, s.coupon_id
                                FROM booking_items bi 
                                JOIN allservices s ON bi.service_id = s.id");
     while ($row = $stmt_items->fetch(PDO::FETCH_ASSOC)) {
@@ -205,12 +205,14 @@ $sql_summary_bookings = "
         b.booking_date,
         b.booking_time,
         b.status,
+        bi.service_id,
         s.name as service_name,
         s.duration,
         s.price,
+        s.coupon_id,
         s.commission as hand_fee,
-        p.payment_method as payment_method  ,
-        p.coupon_code
+        COALESCE(p.payment_method, b.payment_method) as payment_method,
+        GROUP_CONCAT(DISTINCT p.coupon_code SEPARATOR ', ') as coupon_code
     FROM bookings b
     INNER JOIN booking_items bi ON b.id = bi.booking_id
     INNER JOIN allservices s ON bi.service_id = s.id

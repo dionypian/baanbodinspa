@@ -282,15 +282,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                     $service_names_str = !empty($items) 
                                         ? implode(', ', array_column($items, 'service_name')) 
                                         : ($b['default_service_name'] ?? 'ไม่ระบุบริการ');
+
+                                    // 🟢 คำนวณส่วนลดจากคูปอง (นับจำนวนคูปองที่ผูกไว้ ใบละ 300 บาท)
+                                    $coupon_codes_raw = $b['coupon_code'] ?? '';
+                                    $coupon_list = array_filter(array_map('trim', explode(',', $coupon_codes_raw)));
+                                    $coupon_count = count($coupon_list);
+
+                                    $has_face_massage_coupon = $coupon_count > 0 && !empty($items);
+                                    foreach ($items as $item) {
+                                        if ((int)$item['service_id'] !== 35 || (int)$item['coupon_id'] !== 3) {
+                                            $has_face_massage_coupon = false;
+                                            break;
+                                        }
+                                    }
+                                    $coupon_discount = $has_face_massage_coupon
+                                        ? $total_price
+                                        : $coupon_count * 300;
+
+                                    // ยอดเงินส่วนต่างคงเหลือที่ต้องเก็บเพิ่มจากลูกค้า (เช่น 450 - 300 = 150)
+                                    $remaining_price = max(0, $total_price - $coupon_discount);
                                 ?>
                                     <button
                                         type="button"
                                         onclick="openCompleteModal(
                                             <?= $b_id ?>, 
                                             <?= $total_price ?>, 
+                                            <?= $coupon_discount ?>,
+                                            <?= $remaining_price ?>,
                                             '<?= htmlspecialchars($service_names_str, ENT_QUOTES, 'UTF-8') ?>',
                                             '<?= htmlspecialchars($b['payment_method'] ?? '', ENT_QUOTES, 'UTF-8') ?>',
-                                            '<?= htmlspecialchars($b['coupon_code'] ?? '', ENT_QUOTES, 'UTF-8') ?>'
+                                            '<?= htmlspecialchars($coupon_codes_raw, ENT_QUOTES, 'UTF-8') ?>'
                                         )"
                                         class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-ml font-medium transition-colors"
                                     >
@@ -367,9 +388,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <form action="admin-completebook.php" method="POST" enctype="multipart/form-data" class="space-y-4">
                 <input type="hidden" id="complete_booking_id" name="booking_id">
 
-                <div class="bg-amber-50 p-3 rounded-xl">
-                    <div class="text-base text-gray-600">ยอดชำระทั้งสิ้น</div>
-                    <div class="text-3xl font-bold text-[#047857]"><span id="complete_total_price">0</span> บาท</div>
+                <div class="bg-amber-50 p-3.5 rounded-xl text-left space-y-1.5 border border-amber-200">
+                    <div class="flex justify-between text-xs text-gray-600">
+                        <span>ราคาบริการรวม:</span>
+                        <span class="font-semibold"><span id="complete_original_price">0</span> บาท</span>
+                    </div>
+                    
+                    <div id="coupon_discount_row" class="flex justify-between text-xs text-emerald-700 font-semibold hidden">
+                        <span>หักส่วนลดคูปอง:</span>
+                        <span>-<span id="complete_coupon_discount">0</span> บาท</span>
+                    </div>
+
+                    <div class="flex justify-between items-center text-sm font-bold text-[#382214] border-t border-amber-200/60 pt-1.5 mt-1">
+                        <span>ยอดที่ต้องชำระหน้าร้าน:</span>
+                        <span class="text-2xl font-extrabold text-[#047857]"><span id="complete_total_price">0</span> บาท</span>
+                    </div>
                 </div>
 
                 <div class="text-left">
@@ -650,10 +683,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     
     const PromptPay_ID = "0966343365";
 
-    function openCompleteModal(bookingId, totalPrice, serviceNames, paymentMethod, couponCode) {
+    function openCompleteModal(bookingId, originalPrice, couponDiscount, remainingPrice, serviceNames, paymentMethod, couponCode) {
         document.getElementById('complete_booking_id').value = bookingId;
         document.getElementById('complete_booking_id_text').innerText = bookingId;
-        document.getElementById('complete_total_price').innerText = Number(totalPrice).toLocaleString();
+        
+        // แสดงราคารวมเดิม และส่วนลด
+        document.getElementById('complete_original_price').innerText = Number(originalPrice).toLocaleString();
+        
+        const discountRow = document.getElementById('coupon_discount_row');
+        if (couponDiscount > 0) {
+            discountRow.classList.remove('hidden');
+            document.getElementById('complete_coupon_discount').innerText = Number(couponDiscount).toLocaleString();
+        } else {
+            discountRow.classList.add('hidden');
+        }
+
+        // ยอดที่ต้องจ่ายจริง
+        document.getElementById('complete_total_price').innerText = Number(remainingPrice).toLocaleString();
         
         const serviceSpan = document.getElementById('qr_service_text');
         if (serviceSpan) {
@@ -661,26 +707,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         const modal = document.getElementById('completeModal');
-        modal.dataset.totalPrice = totalPrice;
+        // 🟢 เก็บยอดส่วนต่างคงเหลือไว้เจน QR Code
+        modal.dataset.totalPrice = remainingPrice; 
 
-        // เช็คว่าคิวนี้มีคูปองผูกมาตั้งแต่จองหรือไม่
         const hasAutoCoupon = (paymentMethod === 'coupon' || (couponCode && couponCode.trim() !== ''));
         modal.dataset.hasAutoCoupon = hasAutoCoupon ? 'true' : 'false';
 
         const select = document.getElementById('payment_method_select');
         const couponInput = document.getElementById('coupon_code_input');
+        const couponOption = select.querySelector('option[value="coupon"]');
+        if (couponOption) {
+            couponOption.disabled = hasAutoCoupon && remainingPrice > 0;
+        }
 
-        // ถ้ามีการใช้คูปอง หรือมีรหัสคูปองผูกมา
-        if (paymentMethod === 'coupon' || (couponCode && couponCode.trim() !== '')) {
+        // ถ้าจ่ายด้วยคูปองเต็มจำนวน (ยอดเหลือ 0 บาท) ให้เลือกแท็บ คูปอง
+        if (remainingPrice === 0 && hasAutoCoupon) {
             select.value = 'coupon';
-            if (couponInput) {
-                couponInput.value = couponCode || '';
-            }
         } else {
-            select.value = 'cash';
-            if (couponInput) {
-                couponInput.value = '';
-            }
+            // ถ้ามีส่วนต่าง (เช่น 90 นาที เหลือ 150 บาท) ให้ Default เป็น เงินสด ให้แอดมินเลือกเก็บเงิน
+            select.value = 'cash'; 
+        }
+
+        if (couponInput) {
+            couponInput.value = couponCode || '';
         }
 
         handlePaymentMethodChange();
