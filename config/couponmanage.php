@@ -278,7 +278,7 @@ $customer_books = $stmt_cb->fetchAll(PDO::FETCH_ASSOC);
                                             <button type="button" 
                                                     onclick="openSlipPreview('uploads/slips/<?= htmlspecialchars($cb['slip_image']) ?>')" 
                                                     class="px-2.5 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg text-xs font-bold transition-colors">
-                                                🔍 ดูสลิป
+                                                ดูสลิป
                                             </button>
                                         <?php else: ?>
                                             <span class="text-xs text-gray-400">- ไม่มี -</span>

@@ -103,6 +103,16 @@ $conn_srv->close();
                     $conn = new mysqli("localhost", "root", "", "massage_booking");
                     $conn->set_charset("utf8mb4");
 
+                    $days_th = [
+                        'Monday'    => 'วันจันทร์',
+                        'Tuesday'   => 'วันอังคาร',
+                        'Wednesday' => 'วันพุธ',
+                        'Thursday'  => 'วันพฤหัสบดี',
+                        'Friday'    => 'วันศุกร์',
+                        'Saturday'  => 'วันเสาร์',
+                        'Sunday'    => 'วันอาทิตย์'
+                    ];
+
                     $sql = "SELECT * FROM staffs ORDER BY staff_id ASC";
                     $result = $conn->query($sql);
 
@@ -112,6 +122,8 @@ $conn_srv->close();
                             $gender_text = "-";
                             if ($row['gender'] == 'male') $gender_text = "ชาย";
                             if ($row['gender'] == 'female') $gender_text = "หญิง";
+                            $day_off_en = $row['day_off'] ?? '';
+                            $day_off_th = isset($days_th[$day_off_en]) ? $days_th[$day_off_en] : ($day_off_en ?: '-');
                             ?>
                             <tr class="hover:bg-gray-50">
                                 <td class="p-4"><?= $i++ ?></td>
@@ -119,7 +131,7 @@ $conn_srv->close();
                                 <td class="p-4"><span class="bg-gray-100 text-gray-700 font-mono text-sm px-2 py-1 rounded"><?= htmlspecialchars($row['username'] ?? '-') ?></span></td>
                                 <td class="p-4"><?= $gender_text ?></td>
                                 <td class="p-4"><?= htmlspecialchars($row['birthdate'] ?: '-') ?></td>
-                                <td class="p-4"><?= htmlspecialchars($row['day_off'] ?: '-') ?></td>
+                                <td class="p-4"><?= htmlspecialchars($day_off_th) ?></td>
                                 <td class="p-4"><?= htmlspecialchars($row['phone']) ?></td>
                                 <td class="p-4 text-center space-x-1">
                                     <button
