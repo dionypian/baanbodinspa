@@ -94,14 +94,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['coupon_action'])) {
 // 3. ดึงข้อมูลแพ็กเกจคูปอง พร้อม LEFT JOIN ตาราง allservices
 // ----------------------------------------------------
 $sql_coupons_admin = "
-    SELECT c.*, s.id AS service_id, s.name AS service_name, s.duration AS service_duration 
+    SELECT c.*, 
+           GROUP_CONCAT(CONCAT(s.name, ' (', s.duration, ' นาที)') SEPARATOR ', ') AS bound_services_text,
+           MIN(s.id) AS service_id
     FROM coupon c 
     LEFT JOIN allservices s ON s.coupon_id = c.coupon_id 
+    GROUP BY c.coupon_id
     ORDER BY c.coupon_id ASC
 ";
 $stmt_ca = $pdo->prepare($sql_coupons_admin);
 $stmt_ca->execute();
 $admin_coupons = $stmt_ca->fetchAll(PDO::FETCH_ASSOC);
+
+$sql_customer_coupon_books = "
+    SELECT 
+        cb.coupon_book_id AS book_id,
+        cb.cus_id,
+        cb.total_price,
+        cb.payment_method,
+        cb.slip_image,
+        cb.sold_date,
+        c.name AS customer_name,
+        c.phone AS customer_phone,
+        cp.coupon_name,
+        cp.total_leaves,
+        SUM(CASE WHEN cc.used = 1 THEN 1 ELSE 0 END) AS used_count,
+        GROUP_CONCAT(cc.coupon_code ORDER BY cc.id ASC SEPARATOR ', ') AS coupon_codes
+    FROM coupon_book cb
+    LEFT JOIN customers c ON cb.cus_id = c.cus_id
+    LEFT JOIN coupon cp ON cb.coupon_id = cp.coupon_id
+    LEFT JOIN cus_coupon cc ON cb.coupon_book_id = cc.coupon_book_id
+    GROUP BY cb.coupon_book_id
+    ORDER BY cb.sold_date DESC, cb.coupon_book_id DESC
+";
+$stmt_cb = $pdo->prepare($sql_customer_coupon_books);
+$stmt_cb->execute();
+$customer_books = $stmt_cb->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <section id="section-coupon" class="space-y-6 hidden">
@@ -142,9 +170,9 @@ $admin_coupons = $stmt_ca->fetchAll(PDO::FETCH_ASSOC);
                                 <td class="p-4 font-medium"><?= $i++ ?></td>
                                 <td class="p-4 font-bold text-[#382214]"><?= htmlspecialchars($ac['coupon_name']) ?></td>
                                 <td class="p-4">
-                                    <?php if (!empty($ac['service_name'])): ?>
+                                    <?php if (!empty($ac['bound_services_text'])): ?>
                                         <span class="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg">
-                                            <?= htmlspecialchars($ac['service_name']) ?> (<?= $ac['service_duration'] ?> นาที)
+                                            <?= htmlspecialchars($ac['bound_services_text']) ?>
                                         </span>
                                     <?php else: ?>
                                         <span class="text-gray-400 font-normal text-sm">- ยังไม่ได้ผูกบริการ -</span>
@@ -179,6 +207,89 @@ $admin_coupons = $stmt_ca->fetchAll(PDO::FETCH_ASSOC);
                     <?php endif; ?>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <div class="space-y-4 pt-4 border-t border-[#E8E2D5]">
+        <div>
+            <h3 class="text-2xl font-bold text-[#382214]">ประวัติการสั่งซื้อคูปองของลูกค้า</h3>
+            <p class="text-sm text-gray-500 mt-0.5">ตรวจสอบรายการเล่มคูปองที่ลูกค้าทำการสั่งซื้อทั้งหมด</p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-[#E8E2D5] overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-base text-gray-600">
+                    <thead class="bg-[#FDFBF7] text-lg text-[#382214] font-semibold border-b border-[#E8E2D5]">
+                        <tr>
+                            <th class="p-4">เล่มที่</th>
+                            <th class="p-4">วันที่ซื้อ</th>
+                            <th class="p-4">ลูกค้า</th>
+                            <th class="p-4">แพ็กเกจที่ซื้อ</th>
+                            <th class="p-4">สถานะการใช้</th>
+                            <th class="p-4">ยอดชำระ</th>
+                            <th class="p-4">วิธีชำระ</th>
+                            <th class="p-4 text-center">หลักฐานสลิป</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        <?php if (empty($customer_books)): ?>
+                            <tr>
+                                <td colspan="8" class="p-6 text-center text-gray-400">ยังไม่มีประวัติการสั่งซื้อคูปองของลูกค้า</td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($customer_books as $cb): 
+                                $total_leaves = (int)($cb['total_leaves'] ?? 0);
+                                $used_count   = (int)($cb['used_count'] ?? 0);
+                                $pm           = strtolower(trim($cb['payment_method'] ?? 'transfer'));
+                            ?>
+                                <tr class="hover:bg-gray-50 transition-colors text-base">
+                                    <td class="p-4 font-bold text-[#382214]">#<?= $cb['book_id'] ?></td>
+                                    <td class="p-4">
+                                        <div class="font-semibold text-gray-800"><?= date('d/m/Y', strtotime($cb['sold_date'])) ?></div>
+                                        <div class="text-xs text-gray-400"><?= date('H:i', strtotime($cb['sold_date'])) ?> น.</div>
+                                    </td>
+                                    <td class="p-4">
+                                        <div class="font-bold text-[#382214]"><?= htmlspecialchars($cb['customer_name'] ?? 'ลูกค้าทั่วไป') ?></div>
+                                        <div class="text-xs text-gray-500"><?= htmlspecialchars($cb['customer_phone'] ?? '-') ?></div>
+                                    </td>
+                                    <td class="p-4">
+                                        <div class="font-bold text-gray-800"><?= htmlspecialchars($cb['coupon_name'] ?? 'ไม่ระบุแพ็กเกจ') ?></div>
+                                        <?php if (!empty($cb['coupon_codes'])): ?>
+                                            <div class="text-xs text-amber-800 font-semibold mt-1 max-w-xs truncate" title="<?= htmlspecialchars($cb['coupon_codes']) ?>">
+                                                รหัส: <?= htmlspecialchars($cb['coupon_codes']) ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="p-4">
+                                        <span class="inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded-full border <?= ($used_count >= $total_leaves && $total_leaves > 0) ? 'bg-gray-100 text-gray-600 border-gray-300' : 'bg-emerald-50 text-emerald-800 border-emerald-200' ?>">
+                                            ใช้แล้ว <?= $used_count ?>/<?= $total_leaves ?> ใบ
+                                        </span>
+                                    </td>
+                                    <td class="p-4 font-bold text-[#047857]">฿<?= number_format($cb['total_price'], 2) ?></td>
+                                    <td class="p-4 font-semibold uppercase text-sm">
+                                        <?php if ($pm === 'cash'): ?>
+                                            <span class="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">💵 เงินสด</span>
+                                        <?php else: ?>
+                                            <span class="text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">🏦 โอนเงิน</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="p-4 text-center">
+                                        <?php if (!empty($cb['slip_image'])): ?>
+                                            <button type="button" 
+                                                    onclick="openSlipPreview('uploads/slips/<?= htmlspecialchars($cb['slip_image']) ?>')" 
+                                                    class="px-2.5 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg text-xs font-bold transition-colors">
+                                                🔍 ดูสลิป
+                                            </button>
+                                        <?php else: ?>
+                                            <span class="text-xs text-gray-400">- ไม่มี -</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
